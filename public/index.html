@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BRUMMEL FREIGHTPULSE</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --brand:#1e7fc4;--brand-bright:#3a9fe8;--brand-glow:#5bb8ff;
+    --brand-dim:#155d91;
+    --blue:#1e7fc4;--blue-bright:#3a9fe8;--blue-dim:#155d91;
+    --bg:#0d2e4a;--bg2:#0f3554;--bg3:#123d60;
+    --panel:#0e3352;
+    --border:#1e5a8a;--border2:#174d7a;
+    --text:#c8e4f8;--text-dim:#6aaccf;--text-bright:#eaf5ff;
+    --green:#00e5a0;--green-dim:#005c3f;
+    --red:#ff4455;--yellow:#ffd600;--orange:#ff8c00;
+    --ticker-speed:38s;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Montserrat',sans-serif;min-height:100vh;overflow-x:hidden;
+    background-image:radial-gradient(ellipse at 20% 0%,rgba(30,127,196,.35) 0%,transparent 50%),radial-gradient(ellipse at 80% 100%,rgba(14,74,120,.4) 0%,transparent 50%);}
+
+  .header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:linear-gradient(135deg,#0b2a42,#0e3355 60%,#123d66);border-bottom:1px solid var(--brand-dim);position:relative;flex-wrap:wrap;gap:8px;}
+  .header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--brand-dim),var(--brand),var(--brand-bright),var(--brand),var(--brand-dim),transparent);}
+  .logo-area{display:flex;align-items:center;gap:10px;}
+  .logo-img{height:42px;width:42px;object-fit:contain;filter:drop-shadow(0 0 10px rgba(30,127,196,.6));border-radius:6px;}
+  .brand-name{font-size:clamp(14px,2.5vw,22px);font-weight:800;letter-spacing:3px;color:var(--text-bright);text-transform:uppercase;}
+  .brand-name span{color:var(--brand-bright);}
+  .brand-sub{font-size:9px;letter-spacing:3px;color:var(--text-dim);text-transform:uppercase;margin-top:2px;font-weight:500;}
+  .header-right{display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+  .live-badge{display:flex;align-items:center;gap:6px;background:rgba(0,229,160,.1);border:1px solid var(--green);border-radius:3px;padding:5px 10px;font-size:10px;font-weight:700;letter-spacing:2px;color:var(--green);text-transform:uppercase;}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse-green 1.5s ease-in-out infinite;}
+  @keyframes pulse-green{0%,100%{opacity:1;box-shadow:0 0 4px var(--green);}50%{opacity:.4;}}
+  .clock{font-size:clamp(16px,2vw,22px);font-weight:700;color:var(--brand-glow);text-shadow:0 0 12px rgba(30,127,196,.7);letter-spacing:2px;}
+  .clock-date{font-size:10px;color:var(--text-dim);letter-spacing:2px;text-align:right;margin-top:2px;}
+
+  .ticker-bar{background:linear-gradient(90deg,#0b2e4a,#0e3860,#0b2e4a);border-bottom:1px solid var(--border);overflow:hidden;height:32px;display:flex;align-items:center;}
+  .ticker-label{background:linear-gradient(135deg,var(--brand),var(--brand-bright));color:#fff;font-size:10px;font-weight:800;letter-spacing:2px;padding:0 14px;height:100%;display:flex;align-items:center;white-space:nowrap;text-transform:uppercase;flex-shrink:0;}
+  .ticker-track{display:flex;animation:ticker-scroll var(--ticker-speed) linear infinite;white-space:nowrap;}
+  .ticker-item{display:inline-flex;align-items:center;gap:6px;padding:0 22px;font-size:12px;}
+  .ticker-item .lbl{color:var(--text-dim);font-size:10px;font-weight:600;letter-spacing:1px;}
+  .ticker-item .val{color:var(--text-bright);font-weight:600;}
+  .up{color:var(--green)!important;}.down{color:var(--red)!important;}
+  .ticker-sep{color:var(--border);padding:0 4px;}
+  @keyframes ticker-scroll{0%{transform:translateX(0);}100%{transform:translateX(-50%);}}
+
+  .main{padding:12px 14px;display:grid;grid-template-columns:300px 1fr 310px;grid-template-rows:auto auto;gap:12px;align-items:start;}
+  .center-col{grid-column:2;grid-row:1;display:flex;flex-direction:column;gap:12px;}
+
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:6px;overflow:hidden;position:relative;}
+  .panel::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--brand-dim),var(--brand),var(--brand-bright),var(--brand),var(--brand-dim),transparent);}
+  .panel-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;border-bottom:1px solid var(--border2);background:linear-gradient(135deg,rgba(30,127,196,.04),transparent);flex-wrap:wrap;gap:4px;}
+  .panel-title{font-size:11px;font-weight:700;letter-spacing:2px;color:var(--brand-bright);text-transform:uppercase;}
+  .panel-badge{font-size:10px;color:var(--text-dim);letter-spacing:1px;}
+  .panel-body{padding:12px 14px;}
+
+  .dbadge{display:inline-flex;align-items:center;font-size:9px;font-weight:700;letter-spacing:1px;padding:2px 7px;border-radius:2px;text-transform:uppercase;}
+  .dbadge.live{background:rgba(0,229,160,.12);color:var(--green);border:1px solid var(--green-dim);}
+  .dbadge.err{background:rgba(255,68,68,.12);color:var(--red);border:1px solid rgba(255,68,68,.3);}
+  .dbadge.load{background:rgba(30,127,196,.12);color:var(--brand-bright);border:1px solid var(--brand-dim);}
+
+  .diesel-panel{grid-column:1;grid-row:1;}
+  .diesel-hero{background:linear-gradient(135deg,rgba(30,127,196,.08),rgba(0,229,160,.05));border:1px solid var(--border);border-radius:4px;padding:12px;margin-bottom:10px;text-align:center;}
+  .diesel-hero-label{font-size:9px;letter-spacing:3px;color:var(--text-dim);text-transform:uppercase;font-weight:600;}
+  .diesel-hero-state{font-size:clamp(18px,2vw,24px);font-weight:800;color:var(--green);letter-spacing:2px;}
+  .diesel-hero-price{font-size:clamp(28px,3vw,38px);font-weight:800;color:var(--text-bright);}
+  .diesel-hero-sub{font-size:9px;color:var(--text-dim);margin-top:4px;}
+  .diesel-scroll{max-height:520px;overflow-y:auto;}
+  .diesel-scroll::-webkit-scrollbar{width:3px;}
+  .diesel-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+  .state-row{display:flex;align-items:center;padding:7px 2px;border-bottom:1px solid rgba(26,58,92,.4);gap:6px;}
+  .state-row:last-child{border-bottom:none;}
+  .state-code{font-weight:700;font-size:12px;color:var(--text-bright);width:32px;flex-shrink:0;}
+  .state-name{color:var(--text-dim);font-size:11px;flex:1;font-weight:500;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .state-bar{width:48px;flex-shrink:0;height:3px;background:var(--border2);border-radius:2px;overflow:hidden;}
+  .state-bar-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--blue-dim),var(--blue-bright));}
+  .state-price{font-size:13px;font-weight:700;color:var(--text-bright);min-width:50px;text-align:right;flex-shrink:0;}
+  .cheapest-badge{background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green-dim);font-size:8px;font-weight:800;padding:1px 4px;border-radius:2px;margin-left:3px;white-space:nowrap;}
+
+  .rate-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .rate-card{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:14px 12px;position:relative;overflow:hidden;}
+  .rate-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;}
+  .rate-card.reefer::after{background:linear-gradient(90deg,var(--blue),var(--blue-bright));}
+  .rate-card.dryvan::after{background:linear-gradient(90deg,var(--orange),#ffd600);}
+  .rate-card.flatbed::after{background:linear-gradient(90deg,var(--green),#00b874);}
+  .rate-type{font-size:10px;font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;}
+  .rate-card.reefer .rate-type{color:var(--blue-bright);}
+  .rate-card.dryvan .rate-type{color:var(--orange);}
+  .rate-card.flatbed .rate-type{color:var(--green);}
+  .rate-main{font-size:clamp(22px,2.5vw,34px);font-weight:800;color:var(--text-bright);line-height:1;}
+  .rate-unit{font-size:10px;color:var(--text-dim);margin-bottom:8px;font-weight:500;letter-spacing:1px;}
+  .rate-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;}
+  .rate-stat-label{color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;font-weight:600;font-size:9px;}
+  .rate-stat-val{font-size:clamp(12px,1.2vw,15px);font-weight:700;color:var(--text-bright);}
+  .rate-stat-val.up{color:var(--green);}.rate-stat-val.down{color:var(--red);}
+  .best-state-row{display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--border2);font-size:10px;}
+  .best-state-label{color:var(--text-dim);letter-spacing:1px;font-weight:600;}
+  .best-state-val{font-weight:800;font-size:12px;}
+  .rate-card.reefer .best-state-val{color:var(--blue-bright);}
+  .rate-card.dryvan .best-state-val{color:var(--orange);}
+  .rate-card.flatbed .best-state-val{color:var(--green);}
+
+  .map-legend{display:flex;gap:12px;margin-bottom:8px;font-size:10px;flex-wrap:wrap;}
+  .state-heatmap{display:grid;grid-template-columns:repeat(10,1fr);gap:4px;padding:4px 0;}
+  .heat-cell{aspect-ratio:1;border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:transform .2s;border:1px solid transparent;}
+  .heat-cell:hover{transform:scale(1.15);z-index:10;border-color:rgba(255,255,255,.3);}
+  .heat-cell .abbr{font-size:clamp(8px,.9vw,12px);font-weight:800;}
+  .heat-cell .rate{font-size:clamp(6px,.7vw,10px);font-weight:600;opacity:.9;margin-top:1px;}
+  .heat-high{background:rgba(0,229,160,.25);color:var(--green);}
+  .heat-mid{background:rgba(255,214,0,.15);color:var(--yellow);}
+  .heat-low{background:rgba(30,127,196,.2);color:var(--blue-bright);}
+  .heat-lowest{background:rgba(255,68,68,.15);color:var(--red);}
+
+  .news-panel{grid-column:3;grid-row:1;}
+  .news-scroll{max-height:700px;overflow-y:auto;}
+  .news-scroll::-webkit-scrollbar{width:3px;}
+  .news-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+  .news-item{padding:10px 0;border-bottom:1px solid var(--border2);cursor:pointer;transition:padding-left .15s;}
+  .news-item:hover{padding-left:4px;}
+  .news-item:last-child{border-bottom:none;}
+  .news-source{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:3px;}
+  .news-fmcsa{color:var(--blue-bright);}.news-dot{color:var(--orange);}.news-ata{color:var(--green);}.news-breaking{color:var(--red);}.news-market{color:var(--yellow);}
+  .news-headline{font-size:12px;color:var(--text);line-height:1.45;font-weight:500;}
+  .news-time{font-size:10px;color:var(--text-dim);margin-top:4px;}
+  .breaking-tag{display:inline-block;background:var(--red);color:#fff;font-size:8px;font-weight:800;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-right:4px;vertical-align:middle;animation:blink 2s infinite;}
+  @keyframes blink{0%,100%{opacity:1;}50%{opacity:.5;}}
+
+  .bottom-row{grid-column:1/4;grid-row:2;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding-bottom:14px;}
+  .stat-card{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:12px;position:relative;overflow:hidden;}
+  .stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+  .stat-card:nth-child(1)::before{background:var(--blue-bright);}
+  .stat-card:nth-child(2)::before{background:var(--green);}
+  .stat-card:nth-child(3)::before{background:var(--orange);}
+  .stat-card:nth-child(4)::before{background:var(--yellow);}
+  .stat-label{font-size:10px;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px;font-weight:600;}
+  .stat-value{font-size:clamp(22px,2.5vw,32px);font-weight:800;color:var(--text-bright);line-height:1;}
+  .stat-delta{font-size:11px;margin-top:5px;display:flex;align-items:center;gap:4px;font-weight:500;}
+  .stat-sub{font-size:10px;color:var(--text-dim);margin-top:3px;}
+  .sparkline{margin-top:6px;}
+  .sparkline canvas{width:100%;height:28px;display:block;}
+  .mini-gauge{display:flex;align-items:center;gap:8px;margin-top:8px;}
+  .gauge-bar{flex:1;height:4px;background:var(--border2);border-radius:2px;overflow:hidden;}
+  .gauge-fill{height:100%;border-radius:2px;transition:width 1s;}
+
+  .footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:8px 16px;background:var(--bg2);border-top:1px solid var(--border2);font-size:11px;color:var(--text-dim);letter-spacing:1px;font-weight:500;}
+  .footer-sources{display:flex;gap:14px;flex-wrap:wrap;}
+  .source-dot{width:5px;height:5px;border-radius:50%;display:inline-block;margin-right:4px;}
+
+  @media(max-width:1200px){.main{grid-template-columns:260px 1fr 280px;gap:10px;}}
+  @media(max-width:900px){
+    .main{grid-template-columns:1fr 1fr;}
+    .diesel-panel{grid-column:1;grid-row:1;}
+    .center-col{grid-column:2;grid-row:1/3;}
+    .news-panel{grid-column:1;grid-row:2;}
+    .bottom-row{grid-column:1/3;grid-row:3;grid-template-columns:repeat(2,1fr);}
+  }
+  @media(max-width:700px){
+    .main{grid-template-columns:1fr;padding:10px;}
+    .diesel-panel,.center-col,.news-panel{grid-column:1;}
+    .diesel-panel{grid-row:1;}.center-col{grid-row:2;}.news-panel{grid-row:3;}
+    .bottom-row{grid-column:1;grid-row:4;grid-template-columns:repeat(2,1fr);}
+    .rate-cards{grid-template-columns:1fr;}
+  }
+  @media(max-width:480px){
+    .header{padding:8px 12px;}.brand-sub{display:none;}.clock{font-size:15px;}
+    .bottom-row{grid-template-columns:1fr 1fr;}
+    .state-heatmap{grid-template-columns:repeat(5,1fr);}
+  }
+  @media(max-width:360px){.live-badge{display:none;}.bottom-row{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="logo-area">
+    <img class="logo-img" src="brummel-logo.png" alt="Brummel" onerror="this.style.display='none'">
+    <div>
+      <div class="brand-name">BRUMMEL <span>FREIGHTPULSE</span></div>
+      <div class="brand-sub">Live Transportation Intelligence Platform</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+    <div><div class="clock" id="clock">--:--:--</div><div class="clock-date" id="date">---</div></div>
+  </div>
+</header>
+
+<div class="ticker-bar">
+  <div class="ticker-label">⚡ LIVE RATES</div>
+  <div style="overflow:hidden;flex:1">
+    <div class="ticker-track" id="tickerTrack">
+      <span class="ticker-item"><span class="lbl">LOADING LIVE DATA…</span></span>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+
+  <div class="panel diesel-panel">
+    <div class="panel-header">
+      <div class="panel-title">⛽ Diesel Price by State</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="dbadge load" id="dieselBadge">LOADING</span>
+        <span class="panel-badge">$/GAL</span>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="diesel-hero">
+        <div class="diesel-hero-label">Cheapest Diesel Right Now</div>
+        <div class="diesel-hero-state" id="cheapestState">–</div>
+        <div class="diesel-hero-price" id="cheapestPrice">$–.–––</div>
+        <div class="diesel-hero-sub">EIA weekly retail at-pump · real data</div>
+      </div>
+      <div class="diesel-scroll" id="dieselList">
+        <div style="text-align:center;padding:20px;color:var(--text-dim);font-size:12px;">Fetching EIA prices via Gemini Search…</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="center-col">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">📊 DAT Spot Rates — Per Loaded Mile</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="dbadge load" id="ratesBadge">SEARCHING</span>
+          <span class="panel-badge" id="rateTs">–</span>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="rate-cards">
+          <div class="rate-card reefer">
+            <div class="rate-type">❄️ Reefer</div>
+            <div class="rate-main" id="reeferRate">$–.––</div>
+            <div class="rate-unit">per loaded mile</div>
+            <div class="rate-stats">
+              <div><div class="rate-stat-label">7D HIGH</div><div class="rate-stat-val up" id="reeferHigh">–</div></div>
+              <div><div class="rate-stat-label">7D LOW</div><div class="rate-stat-val down" id="reeferLow">–</div></div>
+              <div><div class="rate-stat-label">WK CHG</div><div class="rate-stat-val" id="reeferChange">–</div></div>
+              <div><div class="rate-stat-label">LOADS</div><div class="rate-stat-val" id="reeferLoads">–</div></div>
+            </div>
+            <div class="best-state-row"><span class="best-state-label">TOP MARKET</span><span class="best-state-val" id="reeferBest">–</span></div>
+          </div>
+          <div class="rate-card dryvan">
+            <div class="rate-type">📦 Dry Van</div>
+            <div class="rate-main" id="dryvanRate">$–.––</div>
+            <div class="rate-unit">per loaded mile</div>
+            <div class="rate-stats">
+              <div><div class="rate-stat-label">7D HIGH</div><div class="rate-stat-val up" id="dryvanHigh">–</div></div>
+              <div><div class="rate-stat-label">7D LOW</div><div class="rate-stat-val down" id="dryvanLow">–</div></div>
+              <div><div class="rate-stat-label">WK CHG</div><div class="rate-stat-val" id="dryvanChange">–</div></div>
+              <div><div class="rate-stat-label">LOADS</div><div class="rate-stat-val" id="dryvanLoads">–</div></div>
+            </div>
+            <div class="best-state-row"><span class="best-state-label">TOP MARKET</span><span class="best-state-val" id="dryvanBest">–</span></div>
+          </div>
+          <div class="rate-card flatbed">
+            <div class="rate-type">🔩 Flatbed</div>
+            <div class="rate-main" id="flatbedRate">$–.––</div>
+            <div class="rate-unit">per loaded mile</div>
+            <div class="rate-stats">
+              <div><div class="rate-stat-label">7D HIGH</div><div class="rate-stat-val up" id="flatbedHigh">–</div></div>
+              <div><div class="rate-stat-label">7D LOW</div><div class="rate-stat-val down" id="flatbedLow">–</div></div>
+              <div><div class="rate-stat-label">WK CHG</div><div class="rate-stat-val" id="flatbedChange">–</div></div>
+              <div><div class="rate-stat-label">LOADS</div><div class="rate-stat-val" id="flatbedLoads">–</div></div>
+            </div>
+            <div class="best-state-row"><span class="best-state-label">TOP MARKET</span><span class="best-state-val" id="flatbedBest">–</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">🗺️ Rate Heat Map — Reefer RPM by State</div>
+        <div class="panel-badge">SPOT MARKET</div>
+      </div>
+      <div class="panel-body">
+        <div class="map-legend">
+          <span style="color:var(--green)">■ HIGH (&gt;$3.10)</span>
+          <span style="color:var(--yellow)">■ MED ($2.80–3.10)</span>
+          <span style="color:var(--blue-bright)">■ LOW ($2.50–2.80)</span>
+          <span style="color:var(--red)">■ WEAK (&lt;$2.50)</span>
+        </div>
+        <div class="state-heatmap" id="heatmap">
+          <div style="grid-column:1/11;text-align:center;padding:20px;color:var(--text-dim);font-size:12px;">Loading…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel news-panel">
+    <div class="panel-header">
+      <div class="panel-title">📡 Breaking News & Alerts</div>
+      <span class="dbadge load" id="newsBadge">LOADING</span>
+    </div>
+    <div class="panel-body">
+      <div class="news-scroll" id="newsFeed">
+        <div style="text-align:center;padding:20px;color:var(--text-dim);font-size:12px;">Loading live news…</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom-row">
+    <div class="stat-card">
+      <div class="stat-label">National Avg Diesel</div>
+      <div class="stat-value" id="natDiesel">$–.–––</div>
+      <div class="stat-delta" id="natDieselDelta"><span style="color:var(--text-dim)">Loading…</span></div>
+      <div class="stat-sub">EIA weekly retail at-pump</div>
+      <div class="sparkline"><canvas id="dieselSparkline"></canvas></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Loads Posted</div>
+      <div class="stat-value" id="totalLoads">–</div>
+      <div class="stat-delta" id="loadsDelta"><span style="color:var(--text-dim)">Loading…</span></div>
+      <div class="stat-sub">Last 24h on DAT loadboard</div>
+      <div class="sparkline"><canvas id="loadsSparkline"></canvas></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Truck/Load Ratio</div>
+      <div class="stat-value" id="tlRatio">–.––</div>
+      <div class="stat-delta" id="ratioDelta"><span style="color:var(--text-dim)">Loading…</span></div>
+      <div class="stat-sub">Dry Van national ratio</div>
+      <div class="mini-gauge">
+        <div class="gauge-bar"><div class="gauge-fill" id="ratioGauge" style="background:var(--blue-bright);width:0%"></div></div>
+        <span style="font-size:10px;color:var(--text-dim)" id="ratioLabel">–</span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Fuel Surcharge Index</div>
+      <div class="stat-value" id="fuelSurcharge">–.–%</div>
+      <div class="stat-delta" id="surchargeDelta"><span style="color:var(--text-dim)">Loading…</span></div>
+      <div class="stat-sub">EIA weekly FSC rate</div>
+      <div class="sparkline"><canvas id="surchargeSparkline"></canvas></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  <div class="footer-sources">
+    <span><span class="source-dot" style="background:var(--blue-bright)"></span>DAT · EIA via Gemini Search</span>
+    <span><span class="source-dot" style="background:var(--orange)"></span>FMCSA / DOT / ATA</span>
+    <span><span class="source-dot" style="background:var(--green)"></span>FreightWaves · TTNews</span>
+  </div>
+  <div id="lastUpdate" style="color:var(--text-dim)">Initializing…</div>
+</div>
+
+<script>
+const STATE_NAMES={
+  TX:'Texas',OK:'Oklahoma',LA:'Louisiana',AR:'Arkansas',MS:'Mississippi',
+  TN:'Tennessee',KY:'Kentucky',AL:'Alabama',NM:'New Mexico',
+  IL:'Illinois',IN:'Indiana',IA:'Iowa',KS:'Kansas',MI:'Michigan',
+  MN:'Minnesota',MO:'Missouri',NE:'Nebraska',ND:'N Dakota',OH:'Ohio',
+  SD:'S Dakota',WI:'Wisconsin',
+  FL:'Florida',GA:'Georgia',NC:'N Carolina',SC:'S Carolina',VA:'Virginia',
+  WV:'W Virginia',MD:'Maryland',DE:'Delaware',
+  NY:'New York',PA:'Pennsylvania',NJ:'New Jersey',
+  CT:'Connecticut',MA:'Massachusetts',ME:'Maine',NH:'N Hampshire',
+  RI:'Rhode Island',VT:'Vermont',
+  CO:'Colorado',ID:'Idaho',MT:'Montana',UT:'Utah',WY:'Wyoming',
+  WA:'Washington',OR:'Oregon',NV:'Nevada',AZ:'Arizona',AK:'Alaska',
+  CA:'California',HI:'Hawaii',DC:'Washington DC',
+};
+
+const HEAT_ABBRS=[
+  'WA','OR','CA','NV','ID','MT','WY','UT','CO','AZ',
+  'ND','SD','NE','KS','OK','TX','NM','MN','IA','MO',
+  'WI','IL','IN','MI','OH','KY','TN','AR','LA','MS',
+  'AL','GA','FL','SC','NC','VA','WV','PA','NY','NJ',
+  'ME','NH','VT','MA','RI','CT','DE','MD','DC','AK',
+];
+
+let dieselStates=[];
+let natAvgDiesel=0,totalLoads=0,tlRatio=0,fuelSurcharge=0;
+let rates={
+  reefer:{current:0,high:0,low:0,change:0,loads:0,best:'–'},
+  dryvan:{current:0,high:0,low:0,change:0,loads:0,best:'–'},
+  flatbed:{current:0,high:0,low:0,change:0,loads:0,best:'–'},
+};
+let heatMap=HEAT_ABBRS.map(a=>({abbr:a,rate:0}));
+const dHist=new Array(12).fill(0);
+const lHist=new Array(12).fill(0);
+const sHist=new Array(12).fill(0);
+
+function tick(){
+  const n=new Date();
+  document.getElementById('clock').textContent=n.toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'})+' ET';
+  document.getElementById('date').textContent=n.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'}).toUpperCase();
+}
+setInterval(tick,1000);tick();
+
+function badge(id,type,txt){const e=document.getElementById(id);if(e){e.className=`dbadge ${type}`;e.textContent=txt;}}
+function setStatus(msg,color='var(--text-dim)'){const e=document.getElementById('lastUpdate');if(e)e.innerHTML=`<span style="color:${color}">${msg}</span>`;}
+
+function renderDiesel(){
+  if(!dieselStates.length)return;
+  const sorted=[...dieselStates].sort((a,b)=>a.price-b.price);
+  const mn=sorted[0].price,mx=sorted[sorted.length-1].price;
+  document.getElementById('cheapestState').textContent=sorted[0].name.toUpperCase();
+  document.getElementById('cheapestPrice').textContent=`$${sorted[0].price.toFixed(3)}`;
+  document.getElementById('dieselList').innerHTML=sorted.map((s,i)=>{
+    const pct=mx>mn?Math.round(((s.price-mn)/(mx-mn))*100):50;
+    return `<div class="state-row">
+      <span class="state-code">${s.code}</span>
+      <span class="state-name">${s.name}${i===0?'<span class="cheapest-badge">CHEAPEST</span>':''}</span>
+      <div class="state-bar"><div class="state-bar-fill" style="width:${pct}%"></div></div>
+      <span class="state-price">$${s.price.toFixed(3)}</span>
+    </div>`;
+  }).join('');
+  badge('dieselBadge','live','EIA LIVE');
+}
+
+function renderRates(){
+  document.getElementById('rateTs').textContent=`DAT · ${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}`;
+  ['reefer','dryvan','flatbed'].forEach(t=>{
+    const r=rates[t];if(!r.current)return;
+    document.getElementById(`${t}Rate`).textContent=`$${r.current.toFixed(2)}`;
+    document.getElementById(`${t}High`).textContent=r.high?`$${r.high.toFixed(2)}`:'–';
+    document.getElementById(`${t}Low`).textContent=r.low?`$${r.low.toFixed(2)}`:'–';
+    const ce=document.getElementById(`${t}Change`);
+    if(r.change){ce.textContent=`${r.change>=0?'+':''}$${r.change.toFixed(2)}`;ce.className=`rate-stat-val ${r.change>=0?'up':'down'}`;}
+    document.getElementById(`${t}Loads`).textContent=r.loads?(r.loads/1000).toFixed(1)+'K':'–';
+    document.getElementById(`${t}Best`).textContent=r.best||'–';
+  });
+  badge('ratesBadge','live','DAT LIVE');
+}
+
+function renderHeatmap(){
+  if(!heatMap.some(s=>s.rate>0))return;
+  document.getElementById('heatmap').innerHTML=heatMap.map(s=>{
+    const cls=s.rate>=3.10?'heat-high':s.rate>=2.80?'heat-mid':s.rate>=2.50?'heat-low':'heat-lowest';
+    return `<div class="heat-cell ${cls}" title="${s.abbr}: $${s.rate.toFixed(2)}/mi">
+      <span class="abbr">${s.abbr}</span>
+      <span class="rate">${s.rate>0?'$'+s.rate.toFixed(2):'–'}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderNews(items){
+  const m={breaking:'news-breaking',fmcsa:'news-fmcsa',dot:'news-dot',ata:'news-ata',market:'news-market'};
+  document.getElementById('newsFeed').innerHTML=items.map(n=>{
+    const bt=n.type==='breaking'?'<span class="breaking-tag">BREAKING</span>':'';
+    const oc=n.url?`onclick="window.open('${n.url}','_blank')"`:'' ;
+    return `<div class="news-item" ${oc}>
+      <div class="news-source ${m[n.type]||'news-market'}">${n.source}</div>
+      <div class="news-headline">${bt}${n.headline}</div>
+      <div class="news-time">${n.time}</div>
+    </div>`;
+  }).join('')||'<div style="padding:20px;color:var(--text-dim);font-size:12px">No news available</div>';
+  badge('newsBadge','live','LIVE NEWS');
+}
+
+function renderStats(){
+  if(natAvgDiesel>0){
+    document.getElementById('natDiesel').textContent=`$${natAvgDiesel.toFixed(3)}`;
+    document.getElementById('natDieselDelta').innerHTML=`<span style="color:var(--text-dim);font-size:10px">EIA weekly retail · all states</span>`;
+  }
+  if(totalLoads>0){
+    document.getElementById('totalLoads').textContent=(totalLoads/1000).toFixed(1)+'K';
+    document.getElementById('loadsDelta').innerHTML=`<span style="color:var(--text-dim);font-size:10px">Last 24h · DAT loadboard</span>`;
+  }
+  if(tlRatio>0){
+    document.getElementById('tlRatio').textContent=tlRatio.toFixed(2);
+    const rc=tlRatio<3?'var(--red)':tlRatio>5?'var(--green)':'var(--orange)';
+    const rl=tlRatio<3?'TIGHT':tlRatio>5?'LOOSE':'BALANCED';
+    document.getElementById('ratioDelta').innerHTML=`<span style="color:${rc}">${rl} MARKET</span>`;
+    document.getElementById('ratioGauge').style.cssText=`background:${rc};width:${Math.min((tlRatio/8)*100,100)}%`;
+    document.getElementById('ratioLabel').textContent=rl;
+  }
+  if(fuelSurcharge>0){
+    document.getElementById('fuelSurcharge').textContent=fuelSurcharge.toFixed(1)+'%';
+    document.getElementById('surchargeDelta').innerHTML=`<span style="color:var(--text-dim);font-size:10px">EIA weekly FSC table</span>`;
+  }
+}
+
+function buildTicker(){
+  const items=[];
+  if(natAvgDiesel>0)items.push(`<span class="ticker-item"><span class="lbl">NAT AVG DIESEL</span><span class="val">$${natAvgDiesel.toFixed(3)}</span></span><span class="ticker-sep">|</span>`);
+  if(rates.reefer.current>0)items.push(`<span class="ticker-item"><span class="lbl">REEFER RPM</span><span class="val up">$${rates.reefer.current.toFixed(2)}</span></span><span class="ticker-sep">|</span>`);
+  if(rates.dryvan.current>0)items.push(`<span class="ticker-item"><span class="lbl">DRY VAN RPM</span><span class="val">$${rates.dryvan.current.toFixed(2)}</span></span><span class="ticker-sep">|</span>`);
+  if(rates.flatbed.current>0)items.push(`<span class="ticker-item"><span class="lbl">FLATBED RPM</span><span class="val up">$${rates.flatbed.current.toFixed(2)}</span></span><span class="ticker-sep">|</span>`);
+  dieselStates.slice(0,8).forEach(s=>{
+    items.push(`<span class="ticker-item"><span class="lbl">${s.code} DIESEL</span><span class="val">$${s.price.toFixed(3)}</span></span><span class="ticker-sep">|</span>`);
+  });
+  if(tlRatio>0)items.push(`<span class="ticker-item"><span class="lbl">T/L RATIO</span><span class="val">${tlRatio.toFixed(2)}</span></span><span class="ticker-sep">|</span>`);
+  if(fuelSurcharge>0)items.push(`<span class="ticker-item"><span class="lbl">FUEL SURCHARGE</span><span class="val">${fuelSurcharge.toFixed(1)}%</span></span><span class="ticker-sep">|</span>`);
+  if(items.length)document.getElementById('tickerTrack').innerHTML=items.join('')+items.join('');
+}
+
+function drawSpark(id,data,color){
+  const c=document.getElementById(id);if(!c)return;
+  const ctx=c.getContext('2d');
+  c.width=c.offsetWidth||200;c.height=28;ctx.clearRect(0,0,c.width,c.height);
+  const v=data.filter(x=>x>0);if(v.length<2)return;
+  const mn=Math.min(...v),mx=Math.max(...v),rng=mx-mn||0.1;
+  const w=c.width,h=c.height,xs=w/(data.length-1);
+  ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=1.5;
+  data.forEach((val,i)=>{const x=i*xs,y=h-((val-mn)/rng)*(h-4)-2;(i===0||val===0)?ctx.moveTo(x,y):ctx.lineTo(x,y);});
+  ctx.stroke();ctx.lineTo(w,h);ctx.lineTo(0,h);ctx.closePath();ctx.fillStyle=color+'22';ctx.fill();
+}
+function drawAll(){
+  drawSpark('dieselSparkline',dHist,'#3a9fe8');
+  drawSpark('loadsSparkline',lHist.map(v=>v/1000),'#00e5a0');
+  drawSpark('surchargeSparkline',sHist,'#ffd600');
+}
+
+async function fetchAll(){
+  setStatus('🔍 Fetching live data via Gemini Search…','var(--brand-bright)');
+  badge('dieselBadge','load','LOADING');
+  badge('ratesBadge','load','SEARCHING');
+  badge('newsBadge','load','LOADING');
+  try{
+    const r=await fetch('/api/data',{method:'POST'});
+    if(!r.ok)throw new Error('Server HTTP '+r.status);
+    const d=await r.json();
+    if(!d.ok)throw new Error(d.error||'Unknown error');
+
+    if(d.diesel?.states){
+      dieselStates=Object.entries(d.diesel.states)
+        .filter(([,v])=>v>0)
+        .map(([code,price])=>({code,name:STATE_NAMES[code]||code,price:parseFloat(price)}));
+      natAvgDiesel=d.diesel.national||natAvgDiesel;
+    }
+    if(d.stats?.national>0)natAvgDiesel=d.stats.national;
+
+    if(d.rates){
+      ['reefer','dryvan','flatbed'].forEach(t=>{
+        if(d.rates[t]?.current>0)Object.assign(rates[t],d.rates[t]);
+      });
+    }
+    if(d.heatmap?.length){
+      d.heatmap.forEach(item=>{
+        const s=heatMap.find(h=>h.abbr===item.abbr);
+        if(s&&item.rate>0)s.rate=parseFloat(item.rate);
+      });
+    }
+    if(d.stats){
+      if(d.stats.totalLoads>0)totalLoads=d.stats.totalLoads;
+      if(d.stats.tlRatio>0)tlRatio=d.stats.tlRatio;
+      if(d.stats.fuelSurcharge>0)fuelSurcharge=d.stats.fuelSurcharge;
+    }
+    if(d.news?.length)renderNews(d.news);
+
+    dHist.push(natAvgDiesel);dHist.shift();
+    lHist.push(totalLoads);lHist.shift();
+    sHist.push(fuelSurcharge);sHist.shift();
+
+    renderDiesel();renderRates();renderHeatmap();renderStats();buildTicker();drawAll();
+
+    const ts=new Date();
+    const src=d.cached?'cached':d.grounded?'Gemini + Google Search ✓':'Gemini';
+    setStatus(`✅ Updated ${ts.toLocaleTimeString('en-US',{hour12:false})} · ${src} · next in 10 min`,'var(--green)');
+  }catch(e){
+    console.error('fetchAll error:',e.message);
+    badge('dieselBadge','err','ERROR');
+    badge('ratesBadge','err','ERROR');
+    badge('newsBadge','err','ERROR');
+    setStatus(`⚠ ${e.message} — retrying in 10 min`,'var(--orange)');
+  }
+}
+
+setStatus('🔄 Connecting…','var(--brand-bright)');
+fetchAll();
+setInterval(fetchAll,10*60*1000);
+window.addEventListener('resize',drawAll);
+setTimeout(drawAll,400);
+</script>
+</body>
+</html>
