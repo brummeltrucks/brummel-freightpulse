@@ -365,7 +365,10 @@
     <span><span class="source-dot" style="background:var(--orange)"></span>FMCSA / DOT / ATA</span>
     <span><span class="source-dot" style="background:var(--green)"></span>FreightWaves · TTNews</span>
   </div>
-  <div id="lastUpdate" style="color:var(--text-dim)">Initializing…</div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div id="lastUpdate" style="color:var(--text-dim)">Initializing…</div>
+    <button id="refreshBtn" onclick="manualRefresh()" style="background:rgba(30,127,196,.2);border:1px solid var(--brand);color:var(--brand-bright);font-family:'Montserrat',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;padding:5px 12px;border-radius:3px;cursor:pointer;text-transform:uppercase;transition:all .2s;" onmouseover="this.style.background='rgba(30,127,196,.4)'" onmouseout="this.style.background='rgba(30,127,196,.2)'">⟳ REFRESH</button>
+  </div>
 </div>
 
 <script>
@@ -527,53 +530,62 @@ function drawAll(){
   drawSpark('surchargeSparkline',sHist,'#ffd600');
 }
 
-async function fetchAll(){
+
+
+async function manualRefresh() {
+  const btn = document.getElementById('refreshBtn');
+  btn.textContent = '⟳ LOADING...';
+  btn.disabled = true;
+  btn.style.opacity = '0.5';
+  setStatus('🔄 Manual refresh…','var(--brand-bright)');
+  badge('dieselBadge','load','LOADING');
+  badge('ratesBadge','load','SEARCHING');
+  badge('newsBadge','load','LOADING');
+  try {
+    const r = await fetch('/api/refresh', {method:'POST'});
+    if (!r.ok) throw new Error('Server HTTP '+r.status);
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error||'Unknown error');
+    processData(d);
+  } catch(e) {
+    setStatus(`⚠ ${e.message}`,'var(--orange)');
+  } finally {
+    btn.textContent = '⟳ REFRESH';
+    btn.disabled = false;
+    btn.style.opacity = '1';
+  }
+}
+
+function processData(d) {
+  if (d.diesel?.states) {
+    dieselStates = Object.entries(d.diesel.states).filter(([,v])=>v>0).map(([code,price])=>({code,name:STATE_NAMES[code]||code,price:parseFloat(price)}));
+    natAvgDiesel = d.diesel.national || natAvgDiesel;
+  }
+  if (d.stats?.national>0) natAvgDiesel = d.stats.national;
+  if (d.rates) { ['reefer','dryvan','flatbed'].forEach(t=>{ if(d.rates[t]?.current>0) Object.assign(rates[t],d.rates[t]); }); }
+  if (d.heatmap?.length) { d.heatmap.forEach(item=>{ const s=heatMap.find(h=>h.abbr===item.abbr); if(s&&item.rate>0) s.rate=parseFloat(item.rate); }); }
+  if (d.stats) { if(d.stats.totalLoads>0) totalLoads=d.stats.totalLoads; if(d.stats.tlRatio>0) tlRatio=d.stats.tlRatio; if(d.stats.fuelSurcharge>0) fuelSurcharge=d.stats.fuelSurcharge; }
+  if (d.news?.length) renderNews(d.news);
+  dHist.push(natAvgDiesel);dHist.shift();
+  lHist.push(totalLoads);lHist.shift();
+  sHist.push(fuelSurcharge);sHist.shift();
+  renderDiesel();renderRates();renderHeatmap();renderStats();buildTicker();drawAll();
+  const src = d.cached?'cached':d.grounded?'Perplexity + EIA ✓':'Estimado';
+  setStatus(`✅ Updated ${new Date().toLocaleTimeString('en-US',{hour12:false})} · ${src} · next in 5 min`,'var(--green)');
+}
+
+async function fetchAll() {
   setStatus('🔍 Fetching live data…','var(--brand-bright)');
   badge('dieselBadge','load','LOADING');
   badge('ratesBadge','load','SEARCHING');
   badge('newsBadge','load','LOADING');
-  try{
-    const r=await fetch('/api/data',{method:'POST'});
-    if(!r.ok)throw new Error('Server HTTP '+r.status);
-    const d=await r.json();
-    if(!d.ok)throw new Error(d.error||'Unknown error');
-
-    if(d.diesel?.states){
-      dieselStates=Object.entries(d.diesel.states)
-        .filter(([,v])=>v>0)
-        .map(([code,price])=>({code,name:STATE_NAMES[code]||code,price:parseFloat(price)}));
-      natAvgDiesel=d.diesel.national||natAvgDiesel;
-    }
-    if(d.stats?.national>0)natAvgDiesel=d.stats.national;
-
-    if(d.rates){
-      ['reefer','dryvan','flatbed'].forEach(t=>{
-        if(d.rates[t]?.current>0)Object.assign(rates[t],d.rates[t]);
-      });
-    }
-    if(d.heatmap?.length){
-      d.heatmap.forEach(item=>{
-        const s=heatMap.find(h=>h.abbr===item.abbr);
-        if(s&&item.rate>0)s.rate=parseFloat(item.rate);
-      });
-    }
-    if(d.stats){
-      if(d.stats.totalLoads>0)totalLoads=d.stats.totalLoads;
-      if(d.stats.tlRatio>0)tlRatio=d.stats.tlRatio;
-      if(d.stats.fuelSurcharge>0)fuelSurcharge=d.stats.fuelSurcharge;
-    }
-    if(d.news?.length)renderNews(d.news);
-
-    dHist.push(natAvgDiesel);dHist.shift();
-    lHist.push(totalLoads);lHist.shift();
-    sHist.push(fuelSurcharge);sHist.shift();
-
-    renderDiesel();renderRates();renderHeatmap();renderStats();buildTicker();drawAll();
-
-    const ts=new Date();
-    const src=d.cached?'cached':d.grounded?'EIA Real Data ✓':'Groq AI';
-    setStatus(`✅ Updated ${ts.toLocaleTimeString('en-US',{hour12:false})} · ${src} · next in 5 min`,'var(--green)');
-  }catch(e){
+  try {
+    const r = await fetch('/api/data',{method:'POST'});
+    if (!r.ok) throw new Error('Server HTTP '+r.status);
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error||'Unknown error');
+    processData(d);
+  } catch(e) {
     console.error('fetchAll error:',e.message);
     badge('dieselBadge','err','ERROR');
     badge('ratesBadge','err','ERROR');
@@ -584,7 +596,7 @@ async function fetchAll(){
 
 setStatus('🔄 Connecting…','var(--brand-bright)');
 fetchAll();
-setInterval(fetchAll, 5 * 60 * 1000); // atualiza a cada 5 minutos
+setInterval(fetchAll, 5 * 60 * 1000);
 window.addEventListener('resize',drawAll);
 setTimeout(drawAll,400);
 </script>
