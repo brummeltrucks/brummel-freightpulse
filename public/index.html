@@ -300,7 +300,8 @@
       <div class="panel-body">
         <div class="map-legend">
           <span style="color:var(--green)">■ GREAT (&gt;$2.60)</span>
-          <span style="color:var(--yellow)">■ GOOD ($2.00–2.60)</span>
+          <span style="color:var(--yellow)">■ GOOD ($2.30–2.60)</span>
+          <span style="color:var(--blue-bright)">■ FAIR ($2.00–2.30)</span>
           <span style="color:var(--red)">■ WEAK (&lt;$2.00)</span>
         </div>
         <div class="state-heatmap" id="heatmap">
@@ -470,7 +471,7 @@ function renderRates(){
 function renderHeatmap(){
   if(!heatMap.some(s=>s.rate>0))return;
   document.getElementById('heatmap').innerHTML=heatMap.map(s=>{
-    const cls = s.rate >= 2.60 ? 'heat-high' : s.rate >= 2.00 ? 'heat-mid' : 'heat-lowest';
+    const cls = s.rate >= 2.60 ? 'heat-high' : s.rate >= 2.30 ? 'heat-mid' : s.rate >= 2.00 ? 'heat-low' : 'heat-lowest';
     return `<div class="heat-cell ${cls}" title="${s.abbr}: $${s.rate.toFixed(2)}/mi">
       <span class="abbr">${s.abbr}</span>
       <span class="rate">${s.rate>0?'$'+s.rate.toFixed(2):'–'}</span>
