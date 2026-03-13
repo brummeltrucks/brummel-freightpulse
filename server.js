@@ -35,10 +35,31 @@ async function askPerplexity(system, user, timeoutMs = 28000) {
   if (!r.ok) { const e = await r.text(); throw new Error(`Perplexity ${r.status}: ${e.substring(0, 150)}`); }
   const d = await r.json();
   const text = d.choices?.[0]?.message?.content || '';
-  const clean = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-  const match = clean.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-  if (!match) throw new Error('No JSON: ' + text.substring(0, 200));
-  return JSON.parse(match[0]);
+
+  // Extrai o bloco JSON mais externo
+  const match = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+  if (!match) throw new Error('No JSON block found: ' + text.substring(0, 200));
+
+  let raw = match[0];
+
+  // Remove símbolos de moeda dentro de valores numéricos: "$3.689" → 3.689
+  raw = raw.replace(/:\s*"\$?([\d.]+)"/g, ': $1');       // "key": "$3.68" → "key": 3.68
+  raw = raw.replace(/:\s*\$\s*([\d.]+)/g, ': $1');        // "key": $3.68  → "key": 3.68
+
+  // Remove vírgulas extras antes de } ou ]
+  raw = raw.replace(/,\s*([}\]])/g, '$1');
+
+  // Remove comentários // e /* */
+  raw = raw.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+
+  // Remove caracteres de controle inválidos
+  raw = raw.replace(/[\u0000-\u001F\u007F]/g, ' ');
+
+  try {
+    return JSON.parse(raw);
+  } catch(e) {
+    throw new Error(`JSON parse failed: ${e.message} — raw: ${raw.substring(0, 300)}`);
+  }
 }
 
 // ─── CALL A: Diesel prices + National avg + Fuel surcharge ────────────────────
