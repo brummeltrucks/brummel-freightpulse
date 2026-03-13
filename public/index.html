@@ -299,10 +299,9 @@
       </div>
       <div class="panel-body">
         <div class="map-legend">
-          <span style="color:var(--green)">■ HIGH (&gt;$3.10)</span>
-          <span style="color:var(--yellow)">■ MED ($2.80–3.10)</span>
-          <span style="color:var(--blue-bright)">■ LOW ($2.50–2.80)</span>
-          <span style="color:var(--red)">■ WEAK (&lt;$2.50)</span>
+          <span style="color:var(--green)">■ GREAT (&gt;$2.60)</span>
+          <span style="color:var(--yellow)">■ GOOD ($2.00–2.60)</span>
+          <span style="color:var(--red)">■ WEAK (&lt;$2.00)</span>
         </div>
         <div class="state-heatmap" id="heatmap">
           <div style="grid-column:1/11;text-align:center;padding:20px;color:var(--text-dim);font-size:12px;">Searching reefer rates…</div>
@@ -471,7 +470,7 @@ function renderRates(){
 function renderHeatmap(){
   if(!heatMap.some(s=>s.rate>0))return;
   document.getElementById('heatmap').innerHTML=heatMap.map(s=>{
-    const cls=s.rate>=3.10?'heat-high':s.rate>=2.80?'heat-mid':s.rate>=2.50?'heat-low':'heat-lowest';
+    const cls = s.rate >= 2.60 ? 'heat-high' : s.rate >= 2.00 ? 'heat-mid' : 'heat-lowest';
     return `<div class="heat-cell ${cls}" title="${s.abbr}: $${s.rate.toFixed(2)}/mi">
       <span class="abbr">${s.abbr}</span>
       <span class="rate">${s.rate>0?'$'+s.rate.toFixed(2):'–'}</span>
