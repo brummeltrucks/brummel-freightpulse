@@ -63,22 +63,43 @@ async function askPerplexity(prompt, recency = 'day') {
 
 // ─── GEMINI com Google Search grounding ──────────────────────────────────────
 async function askGeminiSearch(prompt) {
-  const r = await fetchWithTimeout(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `You are a freight market data API. Search Google right now for real current data. Return ONLY valid JSON, no markdown, no explanation.\n\n${prompt}` }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 3000 },
-        tools: [{ google_search: {} }],
-      }),
-    }, 30000);
-  if (!r.ok) throw new Error(`Gemini ${r.status}: ${await r.text()}`);
-  const d = await r.json();
-  const text = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  console.log(`    🔍 Gemini raw: ${text.substring(0,120)}...`);
-  return cleanAndParse(text);
+  // Tenta com google_search grounding primeiro
+  try {
+    const r = await fetchWithTimeout(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `You are a freight data API. Search Google for real current data. Return ONLY valid JSON, no markdown.\n\n${prompt}` }] }],
+          generationConfig: { temperature: 0.1, maxOutputTokens: 3000 },
+          tools: [{ googleSearch: {} }],
+        }),
+      }, 30000);
+    if (!r.ok) throw new Error(`Gemini Search ${r.status}`);
+    const d = await r.json();
+    const text = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    console.log(`    🔍 Gemini Search raw: ${text.substring(0,120)}`);
+    return cleanAndParse(text);
+  } catch(e) {
+    console.warn(`    ⚠️ Gemini Search failed (${e.message}), trying standard Gemini...`);
+    // Fallback: Gemini sem grounding
+    const r = await fetchWithTimeout(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `You are a freight data API. Use your knowledge of current US trucking market data March 2026. Return ONLY valid JSON, no markdown.\n\n${prompt}` }] }],
+          generationConfig: { temperature: 0.1, maxOutputTokens: 3000 },
+        }),
+      }, 28000);
+    if (!r.ok) throw new Error(`Gemini ${r.status}`);
+    const d = await r.json();
+    const text = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    console.log(`    🔍 Gemini standard raw: ${text.substring(0,120)}`);
+    return cleanAndParse(text);
+  }
 }
 
 // ─── FALLBACKS REAIS (dados verificados March 13 2026) ────────────────────────
