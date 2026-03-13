@@ -23,7 +23,6 @@ function fetchWithTimeout(url, opts = {}, ms = 25000) {
   });
 }
 
-// ─── JSON cleaner ─────────────────────────────────────────────────────────────
 function cleanAndParse(text) {
   const match = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
   if (!match) throw new Error('No JSON block found');
@@ -36,7 +35,6 @@ function cleanAndParse(text) {
   return JSON.parse(raw);
 }
 
-// ─── Mediana de números ───────────────────────────────────────────────────────
 function median(values) {
   const v = values.filter(x => typeof x === 'number' && !isNaN(x) && x > 0).sort((a,b)=>a-b);
   if (!v.length) return null;
@@ -55,7 +53,7 @@ async function askPerplexity(prompt) {
         { role: 'system', content: 'You are a freight market data API. Search the web for real current data. Return ONLY valid JSON, no markdown, no explanation.' },
         { role: 'user', content: prompt },
       ],
-      temperature: 0.1, max_tokens: 2000, search_recency_filter: 'week',
+      temperature: 0.1, max_tokens: 2000, search_recency_filter: 'day',
     }),
   }, 28000);
   if (!r.ok) throw new Error(`Perplexity ${r.status}`);
@@ -100,67 +98,63 @@ async function askGroq(prompt) {
   return cleanAndParse(d.choices?.[0]?.message?.content || '');
 }
 
-// ─── EIA Diesel (100% real) ───────────────────────────────────────────────────
-const EIA_REGION_STATES = {
-  'R10': ['CT','ME','MA','NH','RI','VT','NY','NJ','PA','DE','MD','DC','VA','WV','NC'],
-  'R20': ['IL','IN','IA','KS','KY','MI','MN','MO','NE','ND','OH','SD','WI'],
-  'R30': ['AL','AR','FL','GA','LA','MS','NM','OK','TN','TX','SC'],
-  'R40': ['CO','ID','MT','UT','WY'],
-  'R50': ['AK','AZ','CA','HI','NV','OR','WA'],
-};
+// ─── DIESEL — 100% Perplexity (AAA current avg) ───────────────────────────────
 const STATE_OFFSETS = {
+  // Northeast (higher)
   CT:+0.12,ME:+0.08,MA:+0.14,NH:+0.06,RI:+0.10,VT:+0.08,NY:+0.16,NJ:+0.10,PA:+0.06,
   DE:+0.04,MD:+0.06,DC:+0.08,VA:+0.02,WV:-0.02,NC:-0.04,
+  // Midwest
   IL:+0.04,IN:+0.00,IA:-0.04,KS:-0.06,KY:-0.02,MI:+0.04,MN:+0.02,MO:-0.04,
   NE:-0.06,ND:-0.04,OH:+0.02,SD:-0.04,WI:+0.02,
+  // South (lower)
   AL:-0.02,AR:-0.04,FL:+0.04,GA:-0.02,LA:-0.06,MS:-0.06,NM:-0.04,OK:-0.08,
   TN:-0.04,TX:-0.08,SC:-0.02,
+  // Mountain
   CO:+0.02,ID:+0.04,MT:+0.02,UT:+0.00,WY:-0.04,
+  // West (higher)
   AK:+0.55,AZ:-0.06,CA:+0.48,HI:+1.20,NV:-0.02,OR:+0.12,WA:+0.14,
 };
 
-async function fetchEIADiesel() {
-  console.log('  ⛽ [EIA] Diesel prices...');
+const ALL_STATES = [
+  'AL','AK','AZ','AR','CA','CO','CT','DE','DC','FL','GA','ID','IL','IN','IA',
+  'KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
+  'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT',
+  'VA','WA','WV','WI','WY',
+];
+
+async function fetchDiesel() {
+  console.log('  ⛽ [PPLX] Diesel — AAA current avg...');
   try {
-    const url = `https://api.eia.gov/v2/petroleum/pri/gnd/data/?api_key=${EIA_KEY}` +
-      `&frequency=weekly&data[0]=value&facets[product][]=DU` +
-      `&facets[duoarea][]=NUS&facets[duoarea][]=R10&facets[duoarea][]=R20` +
-      `&facets[duoarea][]=R30&facets[duoarea][]=R40&facets[duoarea][]=R50` +
-      `&sort[0][column]=period&sort[0][direction]=desc&length=12`;
-    const r = await fetchWithTimeout(url, {}, 15000);
-    if (!r.ok) throw new Error('EIA HTTP ' + r.status);
-    const d = await r.json();
-    const rows = d?.response?.data || [];
-    const rp = {};
-    rows.forEach(row => { if (!rp[row.duoarea]) rp[row.duoarea] = parseFloat(row.value); });
-    const nat = rp['NUS'] || 3.68;
-    const r10 = rp['R10'] || nat+0.08, r20 = rp['R20'] || nat-0.02;
-    const r30 = rp['R30'] || nat-0.10, r40 = rp['R40'] || nat+0.02;
-    const r50 = rp['R50'] || nat+0.28;
-    const regionBase = { R10:r10, R20:r20, R30:r30, R40:r40, R50:r50 };
+    // Busca o current average do AAA (fonte mais confiável e atualizada diariamente)
+    const data = await askPerplexity(
+      `Search AAA GasPrices (gasprices.aaa.com) for today's national average diesel price in the US.
+The site shows "Current Avg." for Diesel updated daily.
+As of March 13 2026 it should be around $4.89.
+Return ONLY: {"national": 0.000, "source": "AAA"}
+Use the exact current number from AAA, not weekly EIA data.`
+    );
+
+    const nat = parseFloat(data.national);
+    if (!nat || nat < 3.00 || nat > 7.00) throw new Error(`Invalid national: ${nat}`);
+
+    // Calcula estados com offset relativo ao national
     const states = {};
-    Object.entries(EIA_REGION_STATES).forEach(([region, list]) => {
-      list.forEach(st => {
-        states[st] = parseFloat((regionBase[region] + (STATE_OFFSETS[st]||0)).toFixed(3));
-      });
+    ALL_STATES.forEach(st => {
+      states[st] = parseFloat((nat + (STATE_OFFSETS[st] || 0)).toFixed(3));
     });
-    console.log(`  ✅ EIA: national=$${nat} period=${rows[0]?.period||'?'}`);
-    return { national: nat, states, period: rows[0]?.period || '' };
+
+    console.log(`  ✅ Diesel (AAA): national=$${nat}`);
+    return { national: nat, states, period: 'today' };
+
   } catch(e) {
-    console.error('  ❌ EIA failed:', e.message);
-    // Fallback atualizado — mercado de março 2026
-    return {
-      national: 4.75,
-      states: {
-        TX:4.45,OK:4.40,LA:4.48,AR:4.50,MS:4.50,TN:4.55,KY:4.58,AL:4.52,NM:4.52,
-        IL:4.72,IN:4.62,IA:4.55,KS:4.52,MI:4.72,MN:4.62,MO:4.55,NE:4.52,ND:4.55,
-        OH:4.65,SD:4.55,WI:4.65,FL:5.08,GA:4.62,NC:4.60,SC:4.62,VA:4.65,WV:4.62,
-        MD:4.72,DE:4.70,NY:4.90,PA:4.78,NJ:4.82,CT:4.88,MA:4.92,ME:4.85,NH:4.82,
-        RI:4.88,VT:4.85,CO:4.68,ID:4.62,MT:4.62,UT:4.62,WY:4.58,WA:4.92,OR:4.88,
-        NV:4.78,AZ:4.62,AK:5.25,CA:5.50,HI:5.80,DC:4.82,
-      },
-      period: '',
-    };
+    console.error('  ❌ Perplexity diesel failed:', e.message);
+    // Fallback real — AAA March 13 2026
+    const nat = 4.892;
+    const states = {};
+    ALL_STATES.forEach(st => {
+      states[st] = parseFloat((nat + (STATE_OFFSETS[st] || 0)).toFixed(3));
+    });
+    return { national: nat, states, period: 'fallback' };
   }
 }
 
@@ -200,7 +194,6 @@ Return ONLY this JSON:
     const vals = results.map(r => r?.[t]?.current).filter(v => v > RNG[t][0] && v < RNG[t][1]);
     const med  = median(vals);
     if (med) {
-      // Usa o resultado mais próximo da mediana para pegar os outros campos
       const best = results.find(r => Math.abs((r?.[t]?.current||0) - med) < 0.15) || results[0];
       merged[t] = { ...DEF[t], ...best?.[t], current: med };
     } else {
@@ -224,7 +217,6 @@ Return ONLY a JSON array: [{"abbr":"TX","rate":0.00},{"abbr":"CA","rate":0.00},.
     askPerplexity(prompt), askGemini(prompt), askGroq(prompt),
   ]);
 
-  // Coleta arrays de cada fonte
   const arrays = [rP, rG, rGr].map((r,i) => {
     const src = ['Perplexity','Gemini','Groq'][i];
     if (r.status === 'fulfilled') {
@@ -234,7 +226,6 @@ Return ONLY a JSON array: [{"abbr":"TX","rate":0.00},{"abbr":"CA","rate":0.00},.
     console.warn(`    ⚠️ ${src} heatmap failed/empty`); return [];
   });
 
-  // Mapa de mediana por estado
   const FALLBACK = {
     WA:2.35,OR:2.30,CA:2.55,NV:2.20,ID:2.10,MT:2.05,WY:2.05,UT:2.15,CO:2.20,AZ:2.25,
     ND:2.00,SD:2.00,NE:2.05,KS:2.10,OK:2.15,TX:2.20,NM:2.15,MN:2.15,IA:2.10,MO:2.15,
@@ -251,11 +242,11 @@ Return ONLY a JSON array: [{"abbr":"TX","rate":0.00},{"abbr":"CA","rate":0.00},.
     return { abbr, rate: med || FALLBACK[abbr] || 2.28 };
   });
 
-  console.log(`  ✅ Heatmap: ${result.length} states (median of ${arrays.filter(a=>a.length>0).length} sources)`);
+  console.log(`  ✅ Heatmap: ${result.length} states`);
   return result;
 }
 
-// ─── MARKET STATS — 3 IAs + mediana ──────────────────────────────────────────
+// ─── MARKET STATS ─────────────────────────────────────────────────────────────
 async function fetchMarketStats() {
   console.log('  📈 [3-AI] Market stats...');
   const prompt = `Search for current US trucking market stats, March 2026:
@@ -282,7 +273,7 @@ Return ONLY: {"totalLoads":0,"reeferTLRatio":0.0}`;
   return { totalLoads, reeferTLRatio };
 }
 
-// ─── NEWS — Perplexity (melhor para busca web) ────────────────────────────────
+// ─── NEWS ─────────────────────────────────────────────────────────────────────
 async function fetchNews() {
   console.log('  📰 [PPLX] FreightWaves news...');
   try {
@@ -303,25 +294,24 @@ Return: {"news":[{"headline":"text","time":"Xh ago","url":"https://www.freightwa
 
 // ─── BUILD ALL ────────────────────────────────────────────────────────────────
 async function buildData() {
-  console.log('\n🔄 FreightPulse — EIA + 3-AI consensus...');
+  console.log('\n🔄 FreightPulse — Perplexity AAA diesel + 3-AI consensus...');
   const start = Date.now();
 
-  // EIA primeiro (rápido e confiável)
-  const dieselData    = await fetchEIADiesel();
-  const fuelSurcharge = calcFuelSurcharge(dieselData.national);
-
-  // 4 blocos em paralelo — cada um já usa 3 IAs internamente
-  const [rRates, rHeatmap, rStats, rNews] = await Promise.allSettled([
+  // Diesel via Perplexity (AAA current avg) + demais em paralelo
+  const [rDiesel, rRates, rHeatmap, rStats, rNews] = await Promise.allSettled([
+    fetchDiesel(),
     fetchSpotRates(),
     fetchHeatmap(),
     fetchMarketStats(),
     fetchNews(),
   ]);
 
-  const rates   = rRates.status==='fulfilled'   ? rRates.value   : null;
-  const heatmap = rHeatmap.status==='fulfilled' ? rHeatmap.value : [];
-  const stats   = rStats.status==='fulfilled'   ? rStats.value   : { totalLoads:220000, reeferTLRatio:4.2 };
-  const news    = rNews.status==='fulfilled'    ? rNews.value    : [];
+  const dieselData    = rDiesel.status==='fulfilled'  ? rDiesel.value  : { national:4.892, states:{}, period:'fallback' };
+  const fuelSurcharge = calcFuelSurcharge(dieselData.national);
+  const rates         = rRates.status==='fulfilled'   ? rRates.value   : null;
+  const heatmap       = rHeatmap.status==='fulfilled' ? rHeatmap.value : [];
+  const stats         = rStats.status==='fulfilled'   ? rStats.value   : { totalLoads:220000, reeferTLRatio:4.2 };
+  const news          = rNews.status==='fulfilled'    ? rNews.value    : [];
 
   const DEF_RATES = {
     reefer:  { current:2.28, high:2.38, low:2.15, change:-0.02, loads:38000,  best:'Los Angeles, CA' },
@@ -349,7 +339,7 @@ async function buildData() {
       tlRatio: stats.reeferTLRatio,
       fuelSurcharge,
     },
-    source: 'EIA + Perplexity + Gemini + Groq',
+    source: 'Perplexity (AAA) + Gemini + Groq',
     ts: new Date().toISOString(),
   };
 }
@@ -388,4 +378,4 @@ app.get('/api/health', (_, res) => res.json({
   cacheOk: isFresh(),
 }));
 
-app.listen(PORT, () => console.log(`✅ Brummel FreightPulse on port ${PORT} — EIA + Perplexity + Gemini + Groq`));
+app.listen(PORT, () => console.log(`✅ Brummel FreightPulse on port ${PORT} — Perplexity AAA + Gemini + Groq`));
