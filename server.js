@@ -148,7 +148,19 @@ async function fetchEIADiesel() {
     return { national: nat, states, period: rows[0]?.period || '' };
   } catch(e) {
     console.error('  ❌ EIA failed:', e.message);
-    return { national: 3.68, states: {}, period: '' };
+    // Fallback atualizado — mercado de março 2026
+    return {
+      national: 4.75,
+      states: {
+        TX:4.45,OK:4.40,LA:4.48,AR:4.50,MS:4.50,TN:4.55,KY:4.58,AL:4.52,NM:4.52,
+        IL:4.72,IN:4.62,IA:4.55,KS:4.52,MI:4.72,MN:4.62,MO:4.55,NE:4.52,ND:4.55,
+        OH:4.65,SD:4.55,WI:4.65,FL:5.08,GA:4.62,NC:4.60,SC:4.62,VA:4.65,WV:4.62,
+        MD:4.72,DE:4.70,NY:4.90,PA:4.78,NJ:4.82,CT:4.88,MA:4.92,ME:4.85,NH:4.82,
+        RI:4.88,VT:4.85,CO:4.68,ID:4.62,MT:4.62,UT:4.62,WY:4.58,WA:4.92,OR:4.88,
+        NV:4.78,AZ:4.62,AK:5.25,CA:5.50,HI:5.80,DC:4.82,
+      },
+      period: '',
+    };
   }
 }
 
