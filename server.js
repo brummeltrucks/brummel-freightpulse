@@ -25,7 +25,7 @@ async function askPerplexity(system, user, timeoutMs = 28000) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${PPLX_KEY}` },
     body: JSON.stringify({
-      model: 'sonar',
+      model: 'sonar-pro',
       messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
       temperature: 0.1,
       max_tokens: 3000,
@@ -93,51 +93,42 @@ Return ONLY this exact JSON (fill ALL states with real current prices, realistic
   return data;
 }
 
-// ─── CALL B: Spot rates + Heatmap + Market stats ──────────────────────────────
-async function callB() {
-  console.log('  📡 [B] Spot rates + Heatmap + Market stats...');
+// ─── CALL B1: Spot rates + Market stats ───────────────────────────────────────
+async function callB1() {
+  console.log('  📡 [B1] Spot rates + Market stats...');
   const data = await askPerplexity(
-    'You are a real-time freight market data API. Search the web now and return ONLY valid JSON, no markdown, no explanation.',
-    `Search the web RIGHT NOW for these US trucking market data points (current week, March 2026):
+    'You are a real-time freight market data API. Search the web now and return ONLY valid JSON.',
+    `Search DAT.com, FreightWaves SONAR, and Truckstop.com RIGHT NOW for current US trucking spot market data, week of March 13 2026.
 
-1. SPOT RATES per loaded mile — national averages from DAT Trendlines, FreightWaves SONAR, or Truckstop.com:
-   - Reefer (refrigerated trailer) RPM
-   - Dry Van (53ft) RPM  
-   - Flatbed RPM
-   With 7-day high, 7-day low, week-over-week change, loads count, top market city.
+Find:
+1. National average spot rate per loaded mile for Reefer, Dry Van, Flatbed — including 7d high, 7d low, week-over-week change, loads posted, top origin market
+2. Total truck loads posted across all US loadboards (DAT + Truckstop + others) last 24 hours
+3. Reefer-only truck-to-load ratio from DAT reefer market data
 
-2. REEFER RPM BY STATE — current average reefer spot rate per mile for each US state.
-
-3. MARKET STATS:
-   - Total truck loads posted across ALL US loadboards (DAT + Truckstop + 123Loadboard + others) in last 24h
-   - Reefer truck-to-load ratio (ONLY reefer, not dry van)
-
-Realistic ranges: Reefer $2.80-$3.50/mi, DryVan $2.50-$3.20/mi, Flatbed $2.60-$3.30/mi, Reefer T/L: 2.0-8.0
-
-Return ONLY this exact JSON:
+Return ONLY this JSON with real searched numbers:
 {
   "rates": {
-    "reefer":  {"current":3.12,"high7d":3.28,"low7d":2.95,"changeWow":-0.08,"loads":43000,"topMarket":"Los Angeles, CA"},
-    "dryvan":  {"current":2.78,"high7d":2.95,"low7d":2.62,"changeWow":-0.12,"loads":190000,"topMarket":"Atlanta, GA"},
-    "flatbed": {"current":2.94,"high7d":3.15,"low7d":2.76,"changeWow":-0.05,"loads":60000,"topMarket":"Dallas, TX"}
+    "reefer":  {"current":0.00,"high7d":0.00,"low7d":0.00,"changeWow":0.00,"loads":0,"topMarket":"City, ST"},
+    "dryvan":  {"current":0.00,"high7d":0.00,"low7d":0.00,"changeWow":0.00,"loads":0,"topMarket":"City, ST"},
+    "flatbed": {"current":0.00,"high7d":0.00,"low7d":0.00,"changeWow":0.00,"loads":0,"topMarket":"City, ST"}
   },
-  "totalLoads": 248000,
-  "reeferTLRatio": 3.90,
-  "heatmap": [
-    {"abbr":"WA","rate":2.85},{"abbr":"OR","rate":2.85},{"abbr":"CA","rate":2.90},{"abbr":"NV","rate":2.80},{"abbr":"ID","rate":2.75},
-    {"abbr":"MT","rate":2.70},{"abbr":"WY","rate":2.70},{"abbr":"UT","rate":2.80},{"abbr":"CO","rate":2.75},{"abbr":"AZ","rate":2.85},
-    {"abbr":"ND","rate":2.65},{"abbr":"SD","rate":2.65},{"abbr":"NE","rate":2.70},{"abbr":"KS","rate":2.70},{"abbr":"OK","rate":2.75},
-    {"abbr":"TX","rate":2.80},{"abbr":"NM","rate":2.80},{"abbr":"MN","rate":2.70},{"abbr":"IA","rate":2.70},{"abbr":"MO","rate":2.70},
-    {"abbr":"WI","rate":2.75},{"abbr":"IL","rate":2.75},{"abbr":"IN","rate":2.75},{"abbr":"MI","rate":2.75},{"abbr":"OH","rate":2.75},
-    {"abbr":"KY","rate":2.75},{"abbr":"TN","rate":2.80},{"abbr":"AR","rate":2.75},{"abbr":"LA","rate":2.80},{"abbr":"MS","rate":2.75},
-    {"abbr":"AL","rate":2.75},{"abbr":"GA","rate":2.75},{"abbr":"FL","rate":2.40},{"abbr":"SC","rate":2.70},{"abbr":"NC","rate":2.70},
-    {"abbr":"VA","rate":2.70},{"abbr":"WV","rate":2.70},{"abbr":"PA","rate":2.75},{"abbr":"NY","rate":2.80},{"abbr":"NJ","rate":2.80},
-    {"abbr":"ME","rate":2.85},{"abbr":"NH","rate":2.85},{"abbr":"VT","rate":2.85},{"abbr":"MA","rate":2.85},{"abbr":"RI","rate":2.85},
-    {"abbr":"CT","rate":2.85},{"abbr":"DE","rate":2.80},{"abbr":"MD","rate":2.80},{"abbr":"DC","rate":2.80},{"abbr":"AK","rate":3.20}
-  ]
+  "totalLoads": 0,
+  "reeferTLRatio": 0.0
 }`
   );
   return data;
+}
+
+// ─── CALL B2: Reefer heatmap por estado ───────────────────────────────────────
+async function callB2() {
+  console.log('  📡 [B2] Reefer heatmap...');
+  const data = await askPerplexity(
+    'You are a freight rate data API. Return ONLY a valid JSON array, nothing else.',
+    `Search DAT.com or FreightWaves SONAR RIGHT NOW for the current average reefer spot rate per loaded mile by US state, March 2026.
+Return ONLY this JSON array with real current values (range $2.40-$4.50):
+[{"abbr":"WA","rate":0.00},{"abbr":"OR","rate":0.00},{"abbr":"CA","rate":0.00},{"abbr":"NV","rate":0.00},{"abbr":"ID","rate":0.00},{"abbr":"MT","rate":0.00},{"abbr":"WY","rate":0.00},{"abbr":"UT","rate":0.00},{"abbr":"CO","rate":0.00},{"abbr":"AZ","rate":0.00},{"abbr":"ND","rate":0.00},{"abbr":"SD","rate":0.00},{"abbr":"NE","rate":0.00},{"abbr":"KS","rate":0.00},{"abbr":"OK","rate":0.00},{"abbr":"TX","rate":0.00},{"abbr":"NM","rate":0.00},{"abbr":"MN","rate":0.00},{"abbr":"IA","rate":0.00},{"abbr":"MO","rate":0.00},{"abbr":"WI","rate":0.00},{"abbr":"IL","rate":0.00},{"abbr":"IN","rate":0.00},{"abbr":"MI","rate":0.00},{"abbr":"OH","rate":0.00},{"abbr":"KY","rate":0.00},{"abbr":"TN","rate":0.00},{"abbr":"AR","rate":0.00},{"abbr":"LA","rate":0.00},{"abbr":"MS","rate":0.00},{"abbr":"AL","rate":0.00},{"abbr":"GA","rate":0.00},{"abbr":"FL","rate":0.00},{"abbr":"SC","rate":0.00},{"abbr":"NC","rate":0.00},{"abbr":"VA","rate":0.00},{"abbr":"WV","rate":0.00},{"abbr":"PA","rate":0.00},{"abbr":"NY","rate":0.00},{"abbr":"NJ","rate":0.00},{"abbr":"ME","rate":0.00},{"abbr":"NH","rate":0.00},{"abbr":"VT","rate":0.00},{"abbr":"MA","rate":0.00},{"abbr":"RI","rate":0.00},{"abbr":"CT","rate":0.00},{"abbr":"DE","rate":0.00},{"abbr":"MD","rate":0.00},{"abbr":"DC","rate":0.00},{"abbr":"AK","rate":0.00}]`
+  );
+  return Array.isArray(data) ? data : (data.heatmap || data.states || []);
 }
 
 // ─── CALL C: FreightWaves news ────────────────────────────────────────────────
@@ -174,62 +165,56 @@ async function buildData() {
   console.log('\n🔄 FreightPulse — 3 parallel Perplexity searches...');
   const start = Date.now();
 
-  // 3 chamadas em paralelo (em vez de 8)
-  const [rA, rB, rC] = await Promise.allSettled([
+  // 4 chamadas em paralelo
+  const [rA, rB1, rB2, rC] = await Promise.allSettled([
     callA(),
-    callB(),
+    callB1(),
+    callB2(),
     callC(),
   ]);
 
-  // ── Fallbacks ──
-  const A = rA.status === 'fulfilled' ? rA.value : null;
-  const B = rB.status === 'fulfilled' ? rB.value : null;
-  const C = rC.status === 'fulfilled' ? rC.value : null;
+  const A  = rA.status  === 'fulfilled' ? rA.value  : null;
+  const B1 = rB1.status === 'fulfilled' ? rB1.value : null;
+  const B2 = rB2.status === 'fulfilled' ? rB2.value : null;
+  const C  = rC.status  === 'fulfilled' ? rC.value  : null;
 
-  if (rA.status !== 'fulfilled') console.warn('  ⚠️ CallA failed:', rA.reason?.message);
-  if (rB.status !== 'fulfilled') console.warn('  ⚠️ CallB failed:', rB.reason?.message);
-  if (rC.status !== 'fulfilled') console.warn('  ⚠️ CallC failed:', rC.reason?.message);
+  if (!A)  console.warn('  ⚠️ CallA failed:', rA.reason?.message);
+  if (!B1) console.warn('  ⚠️ CallB1 failed:', rB1.reason?.message);
+  if (!B2) console.warn('  ⚠️ CallB2 failed:', rB2.reason?.message);
+  if (!C)  console.warn('  ⚠️ CallC failed:', rC.reason?.message);
 
   const national      = A?.national      > 3.0 ? A.national      : 3.689;
   const fuelSurcharge = A?.fuelSurcharge > 10  ? A.fuelSurcharge : 28.5;
   const states        = A?.states || {};
 
-  const rates = B?.rates || {
+  const DEFS = {
     reefer:  { current:3.12, high7d:3.28, low7d:2.95, changeWow:-0.08, loads:43000,  topMarket:'Los Angeles, CA' },
     dryvan:  { current:2.78, high7d:2.95, low7d:2.62, changeWow:-0.12, loads:190000, topMarket:'Atlanta, GA'     },
     flatbed: { current:2.94, high7d:3.15, low7d:2.76, changeWow:-0.05, loads:60000,  topMarket:'Dallas, TX'      },
   };
-
-  // Valida ranges dos rates
   const RANGES = { reefer:[2.50,4.00], dryvan:[2.20,3.80], flatbed:[2.30,3.80] };
-  const DEFS   = {
-    reefer:  { current:3.12, high7d:3.28, low7d:2.95, changeWow:-0.08, loads:43000,  topMarket:'Los Angeles, CA' },
-    dryvan:  { current:2.78, high7d:2.95, low7d:2.62, changeWow:-0.12, loads:190000, topMarket:'Atlanta, GA'     },
-    flatbed: { current:2.94, high7d:3.15, low7d:2.76, changeWow:-0.05, loads:60000,  topMarket:'Dallas, TX'      },
-  };
+  const rates  = B1?.rates || DEFS;
   ['reefer','dryvan','flatbed'].forEach(t => {
     if (!rates[t] || rates[t].current < RANGES[t][0] || rates[t].current > RANGES[t][1]) rates[t] = DEFS[t];
   });
 
-  let heatmap = B?.heatmap || [];
-  if (!heatmap.length) {
-    heatmap = [
-      {abbr:'WA',rate:2.85},{abbr:'OR',rate:2.85},{abbr:'CA',rate:2.90},{abbr:'NV',rate:2.80},{abbr:'ID',rate:2.75},
-      {abbr:'MT',rate:2.70},{abbr:'WY',rate:2.70},{abbr:'UT',rate:2.80},{abbr:'CO',rate:2.75},{abbr:'AZ',rate:2.85},
-      {abbr:'ND',rate:2.65},{abbr:'SD',rate:2.65},{abbr:'NE',rate:2.70},{abbr:'KS',rate:2.70},{abbr:'OK',rate:2.75},
-      {abbr:'TX',rate:2.80},{abbr:'NM',rate:2.80},{abbr:'MN',rate:2.70},{abbr:'IA',rate:2.70},{abbr:'MO',rate:2.70},
-      {abbr:'WI',rate:2.75},{abbr:'IL',rate:2.75},{abbr:'IN',rate:2.75},{abbr:'MI',rate:2.75},{abbr:'OH',rate:2.75},
-      {abbr:'KY',rate:2.75},{abbr:'TN',rate:2.80},{abbr:'AR',rate:2.75},{abbr:'LA',rate:2.80},{abbr:'MS',rate:2.75},
-      {abbr:'AL',rate:2.75},{abbr:'GA',rate:2.75},{abbr:'FL',rate:2.40},{abbr:'SC',rate:2.70},{abbr:'NC',rate:2.70},
-      {abbr:'VA',rate:2.70},{abbr:'WV',rate:2.70},{abbr:'PA',rate:2.75},{abbr:'NY',rate:2.80},{abbr:'NJ',rate:2.80},
-      {abbr:'ME',rate:2.85},{abbr:'NH',rate:2.85},{abbr:'VT',rate:2.85},{abbr:'MA',rate:2.85},{abbr:'RI',rate:2.85},
-      {abbr:'CT',rate:2.85},{abbr:'DE',rate:2.80},{abbr:'MD',rate:2.80},{abbr:'DC',rate:2.80},{abbr:'AK',rate:3.20},
-    ];
-  }
+  const HMAP_FALLBACK = [
+    {abbr:'WA',rate:2.85},{abbr:'OR',rate:2.85},{abbr:'CA',rate:2.90},{abbr:'NV',rate:2.80},{abbr:'ID',rate:2.75},
+    {abbr:'MT',rate:2.70},{abbr:'WY',rate:2.70},{abbr:'UT',rate:2.80},{abbr:'CO',rate:2.75},{abbr:'AZ',rate:2.85},
+    {abbr:'ND',rate:2.65},{abbr:'SD',rate:2.65},{abbr:'NE',rate:2.70},{abbr:'KS',rate:2.70},{abbr:'OK',rate:2.75},
+    {abbr:'TX',rate:2.80},{abbr:'NM',rate:2.80},{abbr:'MN',rate:2.70},{abbr:'IA',rate:2.70},{abbr:'MO',rate:2.70},
+    {abbr:'WI',rate:2.75},{abbr:'IL',rate:2.75},{abbr:'IN',rate:2.75},{abbr:'MI',rate:2.75},{abbr:'OH',rate:2.75},
+    {abbr:'KY',rate:2.75},{abbr:'TN',rate:2.80},{abbr:'AR',rate:2.75},{abbr:'LA',rate:2.80},{abbr:'MS',rate:2.75},
+    {abbr:'AL',rate:2.75},{abbr:'GA',rate:2.75},{abbr:'FL',rate:2.85},{abbr:'SC',rate:2.70},{abbr:'NC',rate:2.70},
+    {abbr:'VA',rate:2.70},{abbr:'WV',rate:2.70},{abbr:'PA',rate:2.75},{abbr:'NY',rate:2.80},{abbr:'NJ',rate:2.80},
+    {abbr:'ME',rate:2.85},{abbr:'NH',rate:2.85},{abbr:'VT',rate:2.85},{abbr:'MA',rate:2.85},{abbr:'RI',rate:2.85},
+    {abbr:'CT',rate:2.85},{abbr:'DE',rate:2.80},{abbr:'MD',rate:2.80},{abbr:'DC',rate:2.80},{abbr:'AK',rate:3.20},
+  ];
+  let heatmap = (Array.isArray(B2) && B2.length > 10) ? B2 : HMAP_FALLBACK;
   heatmap = heatmap.map(s => ({ abbr: s.abbr, rate: (s.rate >= 2.40 && s.rate <= 4.50) ? +parseFloat(s.rate).toFixed(2) : 2.80 }));
 
-  const totalLoads    = (B?.totalLoads > 100000 && B?.totalLoads < 600000) ? B.totalLoads : 248000;
-  const reeferTLRatio = (B?.reeferTLRatio > 1.0 && B?.reeferTLRatio < 12.0) ? B.reeferTLRatio : 3.90;
+  const totalLoads    = (B1?.totalLoads > 100000 && B1?.totalLoads < 600000) ? B1.totalLoads : 248000;
+  const reeferTLRatio = (B1?.reeferTLRatio > 1.0 && B1?.reeferTLRatio < 12.0) ? B1.reeferTLRatio : 3.90;
 
   const news = (C?.news || []).filter(n => n.headline && n.headline.length > 20).map((n, i) => ({
     headline: n.headline,
