@@ -42,53 +42,23 @@ async function askPerplexity(systemPrompt, userPrompt) {
   const d = await r.json();
   const text = d.choices?.[0]?.message?.content || '';
   const clean = text.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
-  const match = clean.match(/\{[\s\S]*\}/);
+  const match = clean.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
   if (!match) throw new Error('No JSON in response: ' + text.substring(0,200));
   return JSON.parse(match[0]);
 }
 
-// ─── 1. Diesel por estado (valor na bomba, consumidor final) ──────────────────
+// ─── 1. Diesel por estado — 100% Perplexity ───────────────────────────────────
 async function fetchDieselPrices() {
-  console.log('  🔍 Fetching diesel prices...');
-  try {
-    // EIA API real primeiro
-    const url = `https://api.eia.gov/v2/petroleum/pri/gnd/data/?api_key=DEMO_KEY&frequency=weekly&data[0]=value&facets[product][]=DU&facets[duoarea][]=NUS&facets[duoarea][]=R10&facets[duoarea][]=R20&facets[duoarea][]=R30&facets[duoarea][]=R40&facets[duoarea][]=R50&sort[0][column]=period&sort[0][direction]=desc&length=6`;
-    const r = await fetchWithTimeout(url, {}, 12000);
-    if (!r.ok) throw new Error('EIA ' + r.status);
-    const d = await r.json();
-    const rows = d?.response?.data || [];
-    const p = {};
-    rows.forEach(row => { if (!p[row.duoarea]) p[row.duoarea] = parseFloat(row.value); });
-    const nat = p['NUS'] || 3.68;
-    const p1=p['R10']||(nat+0.14), p2=p['R20']||(nat-0.02), p3=p['R30']||(nat-0.18), p4=p['R40']||(nat+0.05), p5=p['R50']||(nat+0.35);
-    console.log(`  ✅ EIA diesel: $${nat}`);
-    return {
-      national: nat,
-      states: {
-        CT:+(p1+0.08).toFixed(3),DE:+(p1+0.02).toFixed(3),DC:+(p1+0.05).toFixed(3),ME:+(p1+0.03).toFixed(3),MD:+(p1+0.04).toFixed(3),
-        MA:+(p1+0.10).toFixed(3),NH:+(p1+0.02).toFixed(3),NJ:+(p1+0.06).toFixed(3),NY:+(p1+0.09).toFixed(3),PA:+(p1+0.03).toFixed(3),
-        RI:+(p1+0.07).toFixed(3),VT:+(p1+0.04).toFixed(3),VA:+(p1-0.02).toFixed(3),WV:+(p1-0.04).toFixed(3),NC:+(p1-0.06).toFixed(3),
-        IL:+(p2+0.02).toFixed(3),IN:+(p2+0.00).toFixed(3),IA:+(p2-0.02).toFixed(3),KS:+(p2-0.03).toFixed(3),KY:+(p2-0.01).toFixed(3),
-        MI:+(p2+0.03).toFixed(3),MN:+(p2+0.00).toFixed(3),MO:+(p2-0.02).toFixed(3),NE:+(p2-0.03).toFixed(3),ND:+(p2-0.01).toFixed(3),
-        OH:+(p2+0.01).toFixed(3),OK:+(p2-0.04).toFixed(3),SD:+(p2-0.02).toFixed(3),TN:+(p2-0.03).toFixed(3),WI:+(p2+0.01).toFixed(3),
-        AL:+(p3+0.01).toFixed(3),AR:+(p3+0.02).toFixed(3),FL:+(p3+0.03).toFixed(3),GA:+(p3+0.01).toFixed(3),LA:+(p3+0.00).toFixed(3),
-        MS:+(p3+0.00).toFixed(3),NM:+(p3-0.01).toFixed(3),TX:+(p3-0.03).toFixed(3),SC:+(p3+0.02).toFixed(3),
-        CO:+(p4+0.02).toFixed(3),ID:+(p4+0.03).toFixed(3),MT:+(p4+0.01).toFixed(3),UT:+(p4+0.00).toFixed(3),WY:+(p4-0.02).toFixed(3),
-        AK:+(p5+0.50).toFixed(3),AZ:+(p5-0.10).toFixed(3),CA:+(p5+0.45).toFixed(3),HI:+(p5+1.10).toFixed(3),NV:+(p5-0.05).toFixed(3),
-        OR:+(p5+0.10).toFixed(3),WA:+(p5+0.15).toFixed(3),
-      }
-    };
-  } catch(e) {
-    console.warn('  ⚠️ EIA failed, using Perplexity for diesel:', e.message);
-    const data = await askPerplexity(
-      'You are a fuel price data API. Return only valid JSON.',
-      `Search EIA.gov right now for the latest weekly retail diesel prices at the pump for consumers in the USA.
+  console.log('  🔍 Fetching diesel prices via Perplexity...');
+  const data = await askPerplexity(
+    'You are a fuel price data API. Return only valid JSON, no extra text.',
+    `Search EIA.gov right now for the latest weekly retail diesel prices at the pump for consumers in the USA (March 2026).
 Find: national average and all 50 states + DC prices in $/gallon.
-Return ONLY this JSON (use real current EIA data):
+Return ONLY this exact JSON (use real current EIA data):
 {"national":0.000,"states":{"TX":0.000,"OK":0.000,"LA":0.000,"AR":0.000,"MS":0.000,"TN":0.000,"KY":0.000,"AL":0.000,"NM":0.000,"IL":0.000,"IN":0.000,"IA":0.000,"KS":0.000,"MI":0.000,"MN":0.000,"MO":0.000,"NE":0.000,"ND":0.000,"OH":0.000,"SD":0.000,"WI":0.000,"FL":0.000,"GA":0.000,"NC":0.000,"SC":0.000,"VA":0.000,"WV":0.000,"MD":0.000,"DE":0.000,"NY":0.000,"PA":0.000,"NJ":0.000,"CT":0.000,"MA":0.000,"ME":0.000,"NH":0.000,"RI":0.000,"VT":0.000,"CO":0.000,"ID":0.000,"MT":0.000,"UT":0.000,"WY":0.000,"WA":0.000,"OR":0.000,"NV":0.000,"AZ":0.000,"AK":0.000,"CA":0.000,"HI":0.000,"DC":0.000}}`
-    );
-    return { national: data.national || 3.68, states: data.states || {} };
-  }
+  );
+  console.log(`  ✅ Diesel national: $${data.national}`);
+  return { national: data.national || 3.68, states: data.states || {} };
 }
 
 // ─── 2. Spot rates (RPM) por tipo de trailer ──────────────────────────────────
@@ -115,9 +85,12 @@ Return ONLY this JSON with real searched values:
   "flatbed": {"current":0.00,"high7d":0.00,"low7d":0.00,"changeWow":0.00,"loads":0,"topMarket":"City, ST"}
 }`
   );
-  // Validate ranges
   const ranges = { reefer:[2.80,3.50], dryvan:[2.50,3.20], flatbed:[2.60,3.30] };
-  const defaults = { reefer:{current:3.04,high7d:3.20,low7d:2.88,changeWow:0.02,loads:43000,topMarket:'Los Angeles, CA'}, dryvan:{current:2.95,high7d:3.10,low7d:2.72,changeWow:0.03,loads:190000,topMarket:'Chicago, IL'}, flatbed:{current:2.87,high7d:3.02,low7d:2.68,changeWow:0.04,loads:60000,topMarket:'Houston, TX'} };
+  const defaults = {
+    reefer:  { current:3.04, high7d:3.20, low7d:2.88, changeWow:0.02, loads:43000,  topMarket:'Los Angeles, CA' },
+    dryvan:  { current:2.95, high7d:3.10, low7d:2.72, changeWow:0.03, loads:190000, topMarket:'Chicago, IL'     },
+    flatbed: { current:2.87, high7d:3.02, low7d:2.68, changeWow:0.04, loads:60000,  topMarket:'Houston, TX'     },
+  };
   ['reefer','dryvan','flatbed'].forEach(t => {
     const r = data[t];
     if (!r || r.current < ranges[t][0] || r.current > ranges[t][1]) {
@@ -133,31 +106,39 @@ Return ONLY this JSON with real searched values:
 async function fetchReeferHeatmap() {
   console.log('  🔍 Fetching reefer heatmap...');
   const data = await askPerplexity(
-    'You are a freight rate data API. Return only valid JSON.',
+    'You are a freight rate data API. Return only valid JSON array, no extra text, no wrapper object.',
     `Search DAT.com, FreightWaves SONAR, or Truckstop.com for the current average reefer spot rate per loaded mile for each US state (March 2026).
 All values must be between $2.40 and $4.00/mile. Use regional freight knowledge if exact state data unavailable.
-Return ONLY this JSON array:
-[
-  {"abbr":"WA","rate":0.00},{"abbr":"OR","rate":0.00},{"abbr":"CA","rate":0.00},{"abbr":"NV","rate":0.00},{"abbr":"ID","rate":0.00},
-  {"abbr":"MT","rate":0.00},{"abbr":"WY","rate":0.00},{"abbr":"UT","rate":0.00},{"abbr":"CO","rate":0.00},{"abbr":"AZ","rate":0.00},
-  {"abbr":"ND","rate":0.00},{"abbr":"SD","rate":0.00},{"abbr":"NE","rate":0.00},{"abbr":"KS","rate":0.00},{"abbr":"OK","rate":0.00},
-  {"abbr":"TX","rate":0.00},{"abbr":"NM","rate":0.00},{"abbr":"MN","rate":0.00},{"abbr":"IA","rate":0.00},{"abbr":"MO","rate":0.00},
-  {"abbr":"WI","rate":0.00},{"abbr":"IL","rate":0.00},{"abbr":"IN","rate":0.00},{"abbr":"MI","rate":0.00},{"abbr":"OH","rate":0.00},
-  {"abbr":"KY","rate":0.00},{"abbr":"TN","rate":0.00},{"abbr":"AR","rate":0.00},{"abbr":"LA","rate":0.00},{"abbr":"MS","rate":0.00},
-  {"abbr":"AL","rate":0.00},{"abbr":"GA","rate":0.00},{"abbr":"FL","rate":0.00},{"abbr":"SC","rate":0.00},{"abbr":"NC","rate":0.00},
-  {"abbr":"VA","rate":0.00},{"abbr":"WV","rate":0.00},{"abbr":"PA","rate":0.00},{"abbr":"NY","rate":0.00},{"abbr":"NJ","rate":0.00},
-  {"abbr":"ME","rate":0.00},{"abbr":"NH","rate":0.00},{"abbr":"VT","rate":0.00},{"abbr":"MA","rate":0.00},{"abbr":"RI","rate":0.00},
-  {"abbr":"CT","rate":0.00},{"abbr":"DE","rate":0.00},{"abbr":"MD","rate":0.00},{"abbr":"DC","rate":0.00},{"abbr":"AK","rate":0.00}
-]`
+Return ONLY a raw JSON array (no wrapper, no "heatmap" key), exactly like this:
+[{"abbr":"WA","rate":0.00},{"abbr":"OR","rate":0.00},{"abbr":"CA","rate":0.00},{"abbr":"NV","rate":0.00},{"abbr":"ID","rate":0.00},{"abbr":"MT","rate":0.00},{"abbr":"WY","rate":0.00},{"abbr":"UT","rate":0.00},{"abbr":"CO","rate":0.00},{"abbr":"AZ","rate":0.00},{"abbr":"ND","rate":0.00},{"abbr":"SD","rate":0.00},{"abbr":"NE","rate":0.00},{"abbr":"KS","rate":0.00},{"abbr":"OK","rate":0.00},{"abbr":"TX","rate":0.00},{"abbr":"NM","rate":0.00},{"abbr":"MN","rate":0.00},{"abbr":"IA","rate":0.00},{"abbr":"MO","rate":0.00},{"abbr":"WI","rate":0.00},{"abbr":"IL","rate":0.00},{"abbr":"IN","rate":0.00},{"abbr":"MI","rate":0.00},{"abbr":"OH","rate":0.00},{"abbr":"KY","rate":0.00},{"abbr":"TN","rate":0.00},{"abbr":"AR","rate":0.00},{"abbr":"LA","rate":0.00},{"abbr":"MS","rate":0.00},{"abbr":"AL","rate":0.00},{"abbr":"GA","rate":0.00},{"abbr":"FL","rate":0.00},{"abbr":"SC","rate":0.00},{"abbr":"NC","rate":0.00},{"abbr":"VA","rate":0.00},{"abbr":"WV","rate":0.00},{"abbr":"PA","rate":0.00},{"abbr":"NY","rate":0.00},{"abbr":"NJ","rate":0.00},{"abbr":"ME","rate":0.00},{"abbr":"NH","rate":0.00},{"abbr":"VT","rate":0.00},{"abbr":"MA","rate":0.00},{"abbr":"RI","rate":0.00},{"abbr":"CT","rate":0.00},{"abbr":"DE","rate":0.00},{"abbr":"MD","rate":0.00},{"abbr":"DC","rate":0.00},{"abbr":"AK","rate":0.00}]`
   );
-  // data pode vir como { heatmap: [...] } ou diretamente como array via JSON wrapper
+
+  // Suporta array direto OU objeto com chave heatmap
   let arr = Array.isArray(data) ? data : (data.heatmap || []);
-  arr = arr.map(s => ({ abbr: s.abbr, rate: (s.rate >= 2.40 && s.rate <= 4.00) ? s.rate : 2.90 }));
+
+  // Se ainda vazio, usa fallback regional realista
+  if (!arr.length) {
+    console.warn('  ⚠️ Heatmap empty, using regional fallback');
+    arr = [
+      {abbr:'WA',rate:3.05},{abbr:'OR',rate:2.98},{abbr:'CA',rate:3.45},{abbr:'NV',rate:2.95},{abbr:'ID',rate:2.85},
+      {abbr:'MT',rate:2.80},{abbr:'WY',rate:2.78},{abbr:'UT',rate:2.90},{abbr:'CO',rate:2.95},{abbr:'AZ',rate:3.00},
+      {abbr:'ND',rate:2.75},{abbr:'SD',rate:2.72},{abbr:'NE',rate:2.80},{abbr:'KS',rate:2.82},{abbr:'OK',rate:2.85},
+      {abbr:'TX',rate:2.90},{abbr:'NM',rate:2.88},{abbr:'MN',rate:2.85},{abbr:'IA',rate:2.82},{abbr:'MO',rate:2.88},
+      {abbr:'WI',rate:2.90},{abbr:'IL',rate:3.00},{abbr:'IN',rate:2.92},{abbr:'MI',rate:2.95},{abbr:'OH',rate:2.98},
+      {abbr:'KY',rate:2.88},{abbr:'TN',rate:2.90},{abbr:'AR',rate:2.85},{abbr:'LA',rate:2.92},{abbr:'MS',rate:2.88},
+      {abbr:'AL',rate:2.90},{abbr:'GA',rate:3.05},{abbr:'FL',rate:3.10},{abbr:'SC',rate:2.98},{abbr:'NC',rate:3.00},
+      {abbr:'VA',rate:3.02},{abbr:'WV',rate:2.85},{abbr:'PA',rate:3.05},{abbr:'NY',rate:3.15},{abbr:'NJ',rate:3.12},
+      {abbr:'ME',rate:3.08},{abbr:'NH',rate:3.05},{abbr:'VT',rate:3.02},{abbr:'MA',rate:3.18},{abbr:'RI',rate:3.10},
+      {abbr:'CT',rate:3.12},{abbr:'DE',rate:3.05},{abbr:'MD',rate:3.08},{abbr:'DC',rate:3.10},{abbr:'AK',rate:3.50},
+    ];
+  }
+
+  arr = arr.map(s => ({ abbr: s.abbr, rate: (s.rate >= 2.40 && s.rate <= 4.00) ? +s.rate.toFixed(2) : 2.90 }));
   console.log(`  ✅ Heatmap: ${arr.length} states`);
   return arr;
 }
 
-// ─── 4. Stats: loads, T/L ratio reefer, fuel surcharge ───────────────────────
+// ─── 4. Stats: loads, T/L ratio REEFER, fuel surcharge ───────────────────────
 async function fetchMarketStats() {
   console.log('  🔍 Fetching market stats...');
   const data = await askPerplexity(
@@ -166,7 +147,7 @@ async function fetchMarketStats() {
 
 1. TOTAL LOADS POSTED in the last 24 hours across all major US loadboards (DAT, Truckstop.com, CH Robinson, Coyote, Echo). Approximate total truck freight loads posted nationwide. Typically 150,000-400,000/day.
 
-2. REEFER TRUCK/LOAD RATIO: Current national load-to-truck ratio specifically for REEFER/refrigerated trailers. Search DAT trendlines or FreightWaves. Typically between 2.0 and 8.0.
+2. REEFER TRUCK/LOAD RATIO: Current national load-to-truck ratio SPECIFICALLY and ONLY for REEFER/refrigerated trailers. Search DAT trendlines or FreightWaves SONAR for reefer T/L ratio. Typically between 2.0 and 8.0. DO NOT return dry van or general ratio — only reefer.
 
 3. FUEL SURCHARGE INDEX: Current US national diesel fuel surcharge percentage that carriers charge shippers. Search ATA (trucking.org), EIA fuel surcharge table, or DAT. Typically 25%-35%.
 
@@ -178,81 +159,56 @@ Return ONLY this JSON:
     tlRatio:       (data.reeferTLRatio > 1.5    && data.reeferTLRatio < 10.0)   ? data.reeferTLRatio : 3.9,
     fuelSurcharge: (data.fuelSurcharge > 15     && data.fuelSurcharge < 50)     ? data.fuelSurcharge : 28.5,
   };
-  console.log(`  ✅ Stats: loads=${stats.totalLoads} TL=${stats.tlRatio} FSC=${stats.fuelSurcharge}%`);
+  console.log(`  ✅ Stats: loads=${stats.totalLoads} Reefer TL=${stats.tlRatio} FSC=${stats.fuelSurcharge}%`);
   return stats;
 }
 
-// ─── 5. News reais de transporte (trucks) ────────────────────────────────────
+// ─── 5. News — apenas FreightWaves, impacto de mercado ───────────────────────
 async function fetchTruckingNews() {
-  console.log('  🔍 Fetching trucking news...');
+  console.log('  🔍 Fetching FreightWaves news...');
+  try {
+    const data = await askPerplexity(
+      'You are a freight news API. Return only valid JSON.',
+      `Search FreightWaves (freightwaves.com) right now for the latest news articles published in the last 7 days (March 2026).
 
-  // Tenta RSS primeiro (100% real, sem custo)
-  const feeds = [
-    { url:'https://www.transportation.gov/briefing-room/feed', source:'DOT',    type:'dot'    },
-    { url:'https://www.fmcsa.dot.gov/newsroom/rss.xml',        source:'FMCSA',  type:'fmcsa'  },
-    { url:'https://www.ttnews.com/rss.xml',                    source:'MARKET', type:'market' },
-    { url:'https://www.trucking.org/rss.xml',                  source:'ATA',    type:'ata'    },
-  ];
-  const rssNews = [];
-  for (const feed of feeds) {
-    try {
-      const r = await fetchWithTimeout(feed.url, {headers:{'User-Agent':'Mozilla/5.0'}}, 8000);
-      if (!r.ok) continue;
-      const xml = await r.text();
-      const items = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
-      for (const item of items.slice(0,2)) {
-        const title = (item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)||item.match(/<title>(.*?)<\/title>/))?.[1]?.trim();
-        const link  = (item.match(/<link>(.*?)<\/link>/)||item.match(/<guid>(.*?)<\/guid>/))?.[1]?.trim();
-        const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1]?.trim();
-        if (!title || title.length < 10) continue;
-        const diff = pubDate ? Date.now()-new Date(pubDate).getTime() : 0;
-        const days = Math.floor(diff/86400000);
-        if (days > 7) continue; // só notícias da última semana
-        const hrs = Math.floor(diff/3600000), mins = Math.floor(diff/60000);
-        rssNews.push({
-          source: feed.source, type: feed.type,
-          headline: title.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&#039;/g,"'").replace(/&quot;/g,'"').replace(/<[^>]+>/g,''),
-          time: days>0?`${days}d ago`:hrs>0?`${hrs}h ago`:mins>0?`${mins}min ago`:'just now',
-          url: link||'#',
-        });
-      }
-    } catch(e) { console.warn(`  ⚠️ RSS ${feed.source}:`, e.message); }
-  }
+IMPORTANT RULES:
+- Only include real news articles from FreightWaves, not white papers, sponsored content, or press releases
+- Focus ONLY on news that directly impacts the freight/trucking market: rate changes, capacity shifts, carrier bankruptcies, regulation changes, economic data affecting freight, fuel price news, FMCSA rules, port disruptions, supply chain disruptions
+- Do NOT include job postings, product announcements, or general industry education pieces
+- Each headline must clearly describe a market-moving event
 
-  // Se RSS retornou menos de 4 notícias, complementa com Perplexity
-  if (rssNews.length < 4) {
-    try {
-      console.log('  🔍 Supplementing news with Perplexity...');
-      const data = await askPerplexity(
-        'You are a trucking news API. Return only valid JSON.',
-        `Search the web right now for the latest trucking and freight transportation news in the USA published in the last 7 days (this week, March 2026).
-Find real headlines from: FreightWaves, TTNews, TruckingInfo, Transport Topics, Overdrive Magazine, FleetOwner, Land Line.
-Focus on: freight rates, regulations, FMCSA rules, trucking companies, fuel prices, ELD, hours of service, capacity.
-Return ONLY this JSON with 6 real headlines sorted newest first:
+Return ONLY this JSON with 7 real FreightWaves news headlines, sorted newest first:
 {"news":[
-  {"source":"FREIGHTWAVES","type":"market","headline":"real headline here","time":"X hr ago","url":"https://freightwaves.com/news/..."},
-  {"source":"FMCSA","type":"fmcsa","headline":"real headline here","time":"X hr ago","url":"https://fmcsa.dot.gov/..."},
-  {"source":"TTNEWS","type":"market","headline":"real headline here","time":"X hr ago","url":"https://ttnews.com/..."},
-  {"source":"DOT","type":"dot","headline":"real headline here","time":"X hr ago","url":"https://transportation.gov/..."},
-  {"source":"ATA","type":"ata","headline":"real headline here","time":"X hr ago","url":"https://trucking.org/..."},
-  {"source":"OVERDRIVE","type":"market","headline":"real headline here","time":"X hr ago","url":"https://overdriveonline.com/..."}
+  {"headline":"real headline here","time":"X hr ago","url":"https://www.freightwaves.com/news/...","impact":"up|down|neutral"},
+  {"headline":"real headline here","time":"X hr ago","url":"https://www.freightwaves.com/news/...","impact":"up|down|neutral"},
+  {"headline":"real headline here","time":"X hr ago","url":"https://www.freightwaves.com/news/...","impact":"up|down|neutral"},
+  {"headline":"real headline here","time":"X hr ago","url":"https://www.freightwaves.com/news/...","impact":"up|down|neutral"},
+  {"headline":"real headline here","time":"X hr ago","url":"https://www.freightwaves.com/news/...","impact":"up|down|neutral"},
+  {"headline":"real headline here","time":"X hr ago","url":"https://www.freightwaves.com/news/...","impact":"up|down|neutral"},
+  {"headline":"real headline here","time":"X hr ago","url":"https://www.freightwaves.com/news/...","impact":"up|down|neutral"}
 ]}`
-      );
-      if (data.news?.length) {
-        data.news.forEach(n => { if (n.headline && n.headline.length > 15 && !rssNews.find(r=>r.headline===n.headline)) rssNews.push(n); });
-      }
-    } catch(e) { console.warn('  ⚠️ Perplexity news:', e.message); }
+    );
+
+    let newsArr = data.news || [];
+
+    // Normaliza e filtra
+    newsArr = newsArr
+      .filter(n => n.headline && n.headline.length > 20)
+      .map((n, i) => ({
+        source: i === 0 ? 'BREAKING' : 'FREIGHTWAVES',
+        type:   i === 0 ? 'breaking' : 'market',
+        headline: n.headline,
+        time: n.time || 'recent',
+        url:  n.url  || 'https://www.freightwaves.com',
+        impact: n.impact || 'neutral',
+      }));
+
+    console.log(`  ✅ FreightWaves news: ${newsArr.length} items`);
+    return newsArr;
+  } catch(e) {
+    console.warn('  ⚠️ FreightWaves news error:', e.message);
+    return [];
   }
-
-  // Ordena por mais recente e limita a 8
-  const sorted = rssNews.sort((a,b) => {
-    const toMin = t => { const m=t.match(/(\d+)(d|h|min)/); if(!m) return 0; return m[2]==='d'?m[1]*1440:m[2]==='h'?m[1]*60:parseInt(m[1]); };
-    return toMin(a.time) - toMin(b.time);
-  }).slice(0,8);
-
-  if (sorted.length > 0) { sorted[0].type='breaking'; sorted[0].source='BREAKING'; }
-  console.log(`  ✅ News: ${sorted.length} items`);
-  return sorted;
 }
 
 // ─── Build all data ───────────────────────────────────────────────────────────
@@ -260,7 +216,6 @@ async function buildData() {
   console.log('\n🔄 Building all data...');
   const start = Date.now();
 
-  // Executa tudo em paralelo para ser rápido
   const [dieselData, spotRates, heatmap, stats, news] = await Promise.allSettled([
     fetchDieselPrices(),
     fetchSpotRates(),
@@ -270,12 +225,15 @@ async function buildData() {
   ]);
 
   const diesel = dieselData.status==='fulfilled' ? dieselData.value : { national:3.68, states:{} };
-  const rates  = spotRates.status==='fulfilled'  ? spotRates.value  : { reefer:{current:3.04,high7d:3.20,low7d:2.88,changeWow:0.02,loads:43000,topMarket:'Los Angeles, CA'}, dryvan:{current:2.95,high7d:3.10,low7d:2.72,changeWow:0.03,loads:190000,topMarket:'Chicago, IL'}, flatbed:{current:2.87,high7d:3.02,low7d:2.68,changeWow:0.04,loads:60000,topMarket:'Houston, TX'} };
-  const hmap   = heatmap.status==='fulfilled'    ? heatmap.value    : [];
-  const st     = stats.status==='fulfilled'      ? stats.value      : { totalLoads:248000, tlRatio:3.9, fuelSurcharge:28.5 };
-  const newsArr= news.status==='fulfilled'       ? news.value       : [];
+  const rates  = spotRates.status==='fulfilled'  ? spotRates.value  : {
+    reefer:  { current:3.04, high7d:3.20, low7d:2.88, changeWow:0.02, loads:43000,  topMarket:'Los Angeles, CA' },
+    dryvan:  { current:2.95, high7d:3.10, low7d:2.72, changeWow:0.03, loads:190000, topMarket:'Chicago, IL'     },
+    flatbed: { current:2.87, high7d:3.02, low7d:2.68, changeWow:0.04, loads:60000,  topMarket:'Houston, TX'     },
+  };
+  const hmap    = heatmap.status==='fulfilled' ? heatmap.value : [];
+  const st      = stats.status==='fulfilled'   ? stats.value   : { totalLoads:248000, tlRatio:3.9, fuelSurcharge:28.5 };
+  const newsArr = news.status==='fulfilled'    ? news.value    : [];
 
-  // Adapta formato das rates para o frontend
   const ratesFormatted = {
     reefer:  { current:rates.reefer.current,  high:rates.reefer.high7d,  low:rates.reefer.low7d,  change:rates.reefer.changeWow,  loads:rates.reefer.loads,  best:rates.reefer.topMarket  },
     dryvan:  { current:rates.dryvan.current,  high:rates.dryvan.high7d,  low:rates.dryvan.low7d,  change:rates.dryvan.changeWow,  loads:rates.dryvan.loads,  best:rates.dryvan.topMarket  },
@@ -290,7 +248,12 @@ async function buildData() {
     rates: ratesFormatted,
     heatmap: hmap,
     news: newsArr,
-    stats: { national: diesel.national, totalLoads: st.totalLoads, tlRatio: st.tlRatio, fuelSurcharge: st.fuelSurcharge },
+    stats: {
+      national:      diesel.national,
+      totalLoads:    st.totalLoads,
+      tlRatio:       st.tlRatio,       // ← reefer only
+      fuelSurcharge: st.fuelSurcharge,
+    },
     grounded: true,
     ts: new Date().toISOString(),
   };
@@ -310,7 +273,6 @@ app.post('/api/data', async (req, res) => {
   }
 });
 
-// Refresh manual — ignora cache
 app.post('/api/refresh', async (req, res) => {
   console.log('🔁 Manual refresh');
   try {
