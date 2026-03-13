@@ -215,55 +215,44 @@ Return ONLY: {"totalLoads":0,"reeferTLRatio":0.0}`
   };
 }
 
-// ─── 6. FreightWaves RSS — News reais ─────────────────────────────────────────
+// ─── 6. News — Perplexity busca FreightWaves ─────────────────────────────────
 async function fetchNews() {
-  console.log('  📰 [RSS] FreightWaves news...');
-  const feeds = [
-    'https://www.freightwaves.com/news/feed',
-    'https://www.freightwaves.com/feed',
-    'https://feeds.freightwaves.com/FreightWaves',
-  ];
-  for (const url of feeds) {
-    try {
-      const r = await fetchWithTimeout(url, { headers:{'User-Agent':'Mozilla/5.0'} }, 8000);
-      if (!r.ok) continue;
-      const xml = await r.text();
-      const items = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
-      if (!items.length) continue;
-      const news = [];
-      for (const item of items.slice(0, 10)) {
-        const title   = (item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)||item.match(/<title>(.*?)<\/title>/))?.[1]?.trim();
-        const link    = (item.match(/<link>(.*?)<\/link>/)||item.match(/<guid[^>]*>(.*?)<\/guid>/))?.[1]?.trim();
-        const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1]?.trim();
-        if (!title || title.length < 15) continue;
-        const diff = pubDate ? Date.now() - new Date(pubDate).getTime() : 0;
-        if (diff > 7 * 86400000) continue; // só últimos 7 dias
-        const hrs  = Math.floor(diff / 3600000);
-        const days = Math.floor(diff / 86400000);
-        const time = days > 0 ? `${days} day${days>1?'s':''} ago` : hrs > 0 ? `${hrs}h ago` : 'just now';
-        news.push({
-          headline: title.replace(/&amp;/g,'&').replace(/&#039;/g,"'").replace(/&quot;/g,'"').replace(/<[^>]+>/g,''),
-          time, url: link || 'https://www.freightwaves.com',
-          impact: 'neutral', breaking: news.length === 0,
-        });
-        if (news.length >= 7) break;
-      }
-      if (news.length >= 3) {
-        console.log(`  ✅ RSS news: ${news.length} articles`);
-        return news;
-      }
-    } catch(e) { console.warn('  ⚠️ RSS attempt failed:', e.message); }
-  }
-  // Fallback: Perplexity para notícias se RSS falhar
-  console.log('  📡 [PPLX] Fallback news...');
-  try {
-    const data = await askPerplexity(
-      'You are a freight news API. Return ONLY valid JSON.',
-      `Find 6 real FreightWaves news headlines from the last 7 days (March 2026) about US trucking market: rates, capacity, regulations, bankruptcies.
-Return: {"news":[{"headline":"...","time":"Xh ago","url":"https://freightwaves.com/news/...","impact":"up|down|neutral"}]}`
-    );
-    return (data.news||[]).filter(n=>n.headline?.length>20).slice(0,7).map((n,i)=>({...n,breaking:i===0}));
-  } catch(e) { return []; }
+  console.log('  📡 [PPLX] FreightWaves news...');
+  const data = await askPerplexity(
+    'You are a freight news API. Return ONLY valid JSON, no markdown, no extra text.',
+    `Search FreightWaves.com right now for the 7 most recent news articles published in the last 7 days (March 2026) that impact the US trucking/freight market.
+
+Include only REAL news: spot rate changes, capacity shifts, carrier bankruptcies, FMCSA rules, fuel price impact, port/supply chain disruptions, load volumes, economic data affecting freight.
+NO white papers, NO sponsored posts, NO job listings.
+
+Set "impact" per article:
+- "up" = bullish for carriers (rates rising, tight capacity, strong demand)
+- "down" = bearish for carriers (rates falling, loose capacity, weak demand)
+- "neutral" = regulatory or mixed
+
+Return ONLY this JSON, sorted newest first:
+{"news":[
+  {"headline":"exact headline text","time":"Xh ago","url":"https://www.freightwaves.com/news/article-slug","impact":"up"},
+  {"headline":"exact headline text","time":"1 day ago","url":"https://www.freightwaves.com/news/article-slug","impact":"down"},
+  {"headline":"exact headline text","time":"2 days ago","url":"https://www.freightwaves.com/news/article-slug","impact":"neutral"},
+  {"headline":"exact headline text","time":"2 days ago","url":"https://www.freightwaves.com/news/article-slug","impact":"up"},
+  {"headline":"exact headline text","time":"3 days ago","url":"https://www.freightwaves.com/news/article-slug","impact":"down"},
+  {"headline":"exact headline text","time":"4 days ago","url":"https://www.freightwaves.com/news/article-slug","impact":"neutral"},
+  {"headline":"exact headline text","time":"5 days ago","url":"https://www.freightwaves.com/news/article-slug","impact":"neutral"}
+]}`
+  );
+  const arr = (data.news || [])
+    .filter(n => n.headline && n.headline.length > 20)
+    .slice(0, 7)
+    .map((n, i) => ({
+      headline: n.headline,
+      time:     n.time    || 'recent',
+      url:      n.url     || 'https://www.freightwaves.com',
+      impact:   n.impact  || 'neutral',
+      breaking: i === 0,
+    }));
+  console.log(`  ✅ News: ${arr.length} articles`);
+  return arr;
 }
 
 // ─── BUILD ALL ────────────────────────────────────────────────────────────────
