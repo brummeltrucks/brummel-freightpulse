@@ -194,32 +194,39 @@ Return ONLY JSON (no $ signs, numbers only):
   return merged;
 }
 
-// ─── 3. HEATMAP ───────────────────────────────────────────────────────────────
-async function fetchHeatmap() {
-  console.log('  🗺️ [PPLX] Heatmap...');
-  try {
-    const data = await askPerplexity(
-      `Search for current average reefer spot rates per loaded mile by US state, March 2026.
-National average is $2.28/mi. Regional variance: West ~$2.35-2.55, Southeast ~$2.15-2.30, Midwest ~$2.18-2.28.
-Return ONLY a JSON array for all 50 states + DC:
-[{"abbr":"TX","rate":2.20},{"abbr":"CA","rate":2.55},...]`
-    , 'week');
+// ─── REEFER RPM OFFSETS por estado (baseado em padrões históricos DAT) ────────
+const REEFER_OFFSETS = {
+  // West — origem forte de produce, rates altas
+  CA:+0.28, WA:+0.10, OR:+0.06, NV:-0.04, AZ:-0.02, ID:-0.14, MT:-0.20, WY:-0.20, UT:-0.10, CO:-0.06,
+  // Plains / Mountain — mercado fraco, pouca demanda
+  ND:-0.26, SD:-0.26, NE:-0.20, KS:-0.16, OK:-0.08, NM:-0.12,
+  // Texas — hub forte
+  TX:-0.06,
+  // Midwest — mercado médio
+  MN:-0.12, IA:-0.16, MO:-0.12, WI:-0.06, IL:-0.02, IN:-0.06, MI:-0.02, OH:-0.02, KY:-0.06,
+  // Southeast — mercado fraco/médio
+  TN:-0.06, AR:-0.12, LA:-0.06, MS:-0.12, AL:-0.06, GA:+0.04, FL:+0.08, SC:-0.02, NC:-0.02,
+  // Northeast — rates altas, pouca oferta de trucks
+  VA:+0.00, WV:-0.12, PA:+0.04, NY:+0.14, NJ:+0.12, CT:+0.12, MA:+0.16, ME:+0.08,
+  NH:+0.06, VT:+0.02, RI:+0.08, DE:+0.04, MD:+0.06, DC:+0.08,
+  // Alaska
+  AK:+0.54,
+};
 
-    const arr = Array.isArray(data) ? data : (data?.heatmap || data?.states || []);
-    if (arr.length < 20) throw new Error(`Too few states: ${arr.length}`);
-
-    // Merge com fallback para estados faltando
-    const result = FALLBACK_HEATMAP.map(fb => {
-      const found = arr.find(s => s.abbr === fb.abbr);
-      const rate = found ? parseFloat(found.rate) : 0;
-      return { abbr: fb.abbr, rate: (rate >= 1.50 && rate <= 3.50) ? rate : fb.rate };
-    });
-    console.log(`  ✅ Heatmap: ${result.length} states`);
-    return result;
-  } catch(e) {
-    console.warn('  ⚠️ Heatmap failed, using fallback:', e.message);
-    return FALLBACK_HEATMAP;
-  }
+// ─── 3. HEATMAP — calculado sobre o nacional real ─────────────────────────────
+function buildHeatmap(nationalReefer) {
+  console.log(`  🗺️ Heatmap calc from national reefer ${nationalReefer}`);
+  const HEAT_ORDER = [
+    'WA','OR','CA','NV','ID','MT','WY','UT','CO','AZ',
+    'ND','SD','NE','KS','OK','TX','NM','MN','IA','MO',
+    'WI','IL','IN','MI','OH','KY','TN','AR','LA','MS',
+    'AL','GA','FL','SC','NC','VA','WV','PA','NY','NJ',
+    'ME','NH','VT','MA','RI','CT','DE','MD','DC','AK',
+  ];
+  return HEAT_ORDER.map(abbr => ({
+    abbr,
+    rate: parseFloat((nationalReefer + (REEFER_OFFSETS[abbr] || 0)).toFixed(2)),
+  }));
 }
 
 // ─── 4. MARKET STATS ──────────────────────────────────────────────────────────
@@ -275,19 +282,20 @@ async function buildData() {
   console.log('\n🔄 FreightPulse building...');
   const start = Date.now();
 
-  const [rDiesel, rRates, rHeatmap, rStats, rNews] = await Promise.allSettled([
+  const [rDiesel, rRates, rStats, rNews] = await Promise.allSettled([
     fetchDiesel(),
     fetchSpotRates(),
-    fetchHeatmap(),
     fetchMarketStats(),
     fetchNews(),
   ]);
 
   const diesel  = rDiesel.status  === 'fulfilled' ? rDiesel.value  : { national: FALLBACK_DIESEL_NATIONAL, states: buildDieselStates(FALLBACK_DIESEL_NATIONAL), period: 'fallback' };
   const ratesRaw= rRates.status   === 'fulfilled' ? rRates.value   : FALLBACK_RATES;
-  const heatmap = rHeatmap.status === 'fulfilled' ? rHeatmap.value : FALLBACK_HEATMAP;
   const stats   = rStats.status   === 'fulfilled' ? rStats.value   : { totalLoads: 220000, reeferTLRatio: 4.2 };
   const news    = rNews.status    === 'fulfilled' ? rNews.value    : [];
+
+  // Heatmap calculado sobre o nacional real do reefer
+  const heatmap = buildHeatmap(ratesRaw.reefer.current || 2.28);
 
   const rates = {
     reefer:  { current: ratesRaw.reefer.current,  high: ratesRaw.reefer.high7d,  low: ratesRaw.reefer.low7d,  change: ratesRaw.reefer.changeWow,  loads: ratesRaw.reefer.loads,  best: ratesRaw.reefer.topMarket  },
