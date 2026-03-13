@@ -375,20 +375,26 @@ app.post('/api/refresh', async (req, res) => {
 
 app.post('/api/force-rates', async (req, res) => {
   console.log('⚡ Force rates refresh');
+  ratesCache = { data: null, ts: 0 }; // invalida cache fora do try
   try {
-    ratesCache = { data: null, ts: 0 };
-    const rates = await fetchSpotRates();
-    if (cache.data) {
-      cache.data.rates = {
-        reefer:  { current: rates.reefer.current,  high: rates.reefer.high7d,  low: rates.reefer.low7d,  change: rates.reefer.changeWow,  loads: rates.reefer.loads,  best: rates.reefer.topMarket  },
-        dryvan:  { current: rates.dryvan.current,  high: rates.dryvan.high7d,  low: rates.dryvan.low7d,  change: rates.dryvan.changeWow,  loads: rates.dryvan.loads,  best: rates.dryvan.topMarket  },
-        flatbed: { current: rates.flatbed.current, high: rates.flatbed.high7d, low: rates.flatbed.low7d, change: rates.flatbed.changeWow, loads: rates.flatbed.loads, best: rates.flatbed.topMarket },
-      };
-    }
+    const ratesRaw = await fetchSpotRates();
+    const rates = {
+      reefer:  { current: ratesRaw.reefer.current,  high: ratesRaw.reefer.high7d,  low: ratesRaw.reefer.low7d,  change: ratesRaw.reefer.changeWow,  loads: ratesRaw.reefer.loads,  best: ratesRaw.reefer.topMarket  },
+      dryvan:  { current: ratesRaw.dryvan.current,  high: ratesRaw.dryvan.high7d,  low: ratesRaw.dryvan.low7d,  change: ratesRaw.dryvan.changeWow,  loads: ratesRaw.dryvan.loads,  best: ratesRaw.dryvan.topMarket  },
+      flatbed: { current: ratesRaw.flatbed.current, high: ratesRaw.flatbed.high7d, low: ratesRaw.flatbed.low7d, change: ratesRaw.flatbed.changeWow, loads: ratesRaw.flatbed.loads, best: ratesRaw.flatbed.topMarket },
+    };
+    if (cache.data) cache.data.rates = rates;
     res.json({ ok: true, rates, ts: new Date().toISOString() });
   } catch(e) {
     console.error('❌ /api/force-rates:', e.message);
-    res.status(502).json({ ok: false, error: e.message });
+    // Mesmo com erro, retorna os fallbacks — nunca 502
+    const rates = {
+      reefer:  { current: FALLBACK_RATES.reefer.current,  high: FALLBACK_RATES.reefer.high7d,  low: FALLBACK_RATES.reefer.low7d,  change: FALLBACK_RATES.reefer.changeWow,  loads: FALLBACK_RATES.reefer.loads,  best: FALLBACK_RATES.reefer.topMarket  },
+      dryvan:  { current: FALLBACK_RATES.dryvan.current,  high: FALLBACK_RATES.dryvan.high7d,  low: FALLBACK_RATES.dryvan.low7d,  change: FALLBACK_RATES.dryvan.changeWow,  loads: FALLBACK_RATES.dryvan.loads,  best: FALLBACK_RATES.dryvan.topMarket  },
+      flatbed: { current: FALLBACK_RATES.flatbed.current, high: FALLBACK_RATES.flatbed.high7d, low: FALLBACK_RATES.flatbed.low7d, change: FALLBACK_RATES.flatbed.changeWow, loads: FALLBACK_RATES.flatbed.loads, best: FALLBACK_RATES.flatbed.topMarket },
+    };
+    if (cache.data) cache.data.rates = rates;
+    res.json({ ok: true, rates, fallback: true, error: e.message, ts: new Date().toISOString() });
   }
 });
 
