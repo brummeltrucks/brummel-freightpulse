@@ -12,8 +12,8 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── CACHE ────────────────────────────────────────────────────────────────────
-const TTL       = 5  * 60 * 1000;       // 5 min — diesel, news, stats
-const TTL_RATES = 48 * 60 * 60 * 1000; // 48h  — spot rates
+const TTL       = 5  * 60 * 1000;       // 5 min  — diesel, news, stats
+const TTL_RATES = 3  * 60 * 60 * 1000; // 3h     — spot rates + heatmap
 
 let cache      = { data: null, ts: 0 };
 let ratesCache = { data: null, ts: 0 };
@@ -61,21 +61,24 @@ async function askPerplexity(prompt, recency = 'day') {
   return cleanAndParse(d.choices?.[0]?.message?.content || '');
 }
 
-// ─── GEMINI ───────────────────────────────────────────────────────────────────
-async function askGemini(prompt) {
+// ─── GEMINI com Google Search grounding ──────────────────────────────────────
+async function askGeminiSearch(prompt) {
   const r = await fetchWithTimeout(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: `Search the web for real current data. Return ONLY valid JSON, no markdown.\n\n${prompt}` }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 2000 },
+        contents: [{ parts: [{ text: `You are a freight market data API. Search Google right now for real current data. Return ONLY valid JSON, no markdown, no explanation.\n\n${prompt}` }] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 3000 },
+        tools: [{ google_search: {} }],
       }),
-    }, 28000);
-  if (!r.ok) throw new Error(`Gemini ${r.status}`);
+    }, 30000);
+  if (!r.ok) throw new Error(`Gemini ${r.status}: ${await r.text()}`);
   const d = await r.json();
-  return cleanAndParse(d.candidates?.[0]?.content?.parts?.[0]?.text || '');
+  const text = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  console.log(`    🔍 Gemini raw: ${text.substring(0,120)}...`);
+  return cleanAndParse(text);
 }
 
 // ─── FALLBACKS REAIS (dados verificados March 13 2026) ────────────────────────
@@ -375,8 +378,9 @@ app.get('/api/health', (_, res) => res.json({
   hasGemini: !!GEMINI_KEY,
   cacheAge:  cache.ts ? Math.round((Date.now()-cache.ts)/1000)+'s' : 'empty',
   cacheOk:   isFresh(),
-  ratesCacheAge: ratesCache.ts ? Math.round((Date.now()-ratesCache.ts)/1000/60/60)+'h' : 'empty',
+  ratesCacheAge: ratesCache.ts ? Math.round((Date.now()-ratesCache.ts)/1000/60)+'min' : 'empty',
   ratesCacheOk:  isRatesFresh(),
+  nextRatesRefresh: ratesCache.ts ? Math.round((TTL_RATES-(Date.now()-ratesCache.ts))/1000/60)+'min' : 'now',
 }));
 
 app.listen(PORT, () => console.log(`✅ Brummel FreightPulse on port ${PORT}`));
