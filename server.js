@@ -98,9 +98,16 @@ Return ONLY this exact JSON structure (use null for any value you cannot find):
   ]
 }`;
 
-  const data = await askPerplexity(prompt, 'day');
-  console.log(`  ✅ Got market data`);
-  return data;
+  try {
+    const data = await askPerplexity(prompt, 'day');
+    console.log(`  ✅ Raw response keys: ${Object.keys(data||{}).join(', ')}`);
+    console.log(`  📊 diesel=${data?.diesel} reefer=${data?.reefer?.current} dryvan=${data?.dryvan?.current} flatbed=${data?.flatbed?.current}`);
+    console.log(`  📊 tlRatio=${data?.tlRatio} loads=${data?.totalLoads} news=${data?.news?.length||0}`);
+    return data;
+  } catch(e) {
+    console.error(`  ❌ Perplexity batch failed: ${e.message}`);
+    throw e;
+  }
 }
 
 // ─── FETCH NEWS SEPARATELY (fallback se não veio no batch) ────────────────────
