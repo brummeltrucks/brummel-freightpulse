@@ -59,25 +59,18 @@
   .dbadge.err{background:rgba(255,68,68,.12);color:var(--red);border:1px solid rgba(255,68,68,.3);}
   .dbadge.load{background:rgba(30,127,196,.12);color:var(--brand-bright);border:1px solid var(--brand-dim);}
 
-  /* DIESEL */
+  /* DIESEL — nacional apenas */
   .diesel-panel{grid-column:1;grid-row:1;display:flex;flex-direction:column;}
-  .diesel-panel .panel-body{flex:1;display:flex;flex-direction:column;overflow:hidden;}
-  .diesel-hero{background:linear-gradient(135deg,rgba(30,127,196,.08),rgba(0,229,160,.05));border:1px solid var(--border);border-radius:4px;padding:12px;margin-bottom:10px;text-align:center;flex-shrink:0;}
-  .diesel-hero-label{font-size:9px;letter-spacing:3px;color:var(--text-dim);text-transform:uppercase;font-weight:600;}
-  .diesel-hero-state{font-size:clamp(18px,2vw,24px);font-weight:800;color:var(--green);letter-spacing:2px;}
-  .diesel-hero-price{font-size:clamp(28px,3vw,38px);font-weight:800;color:var(--text-bright);}
-  .diesel-hero-sub{font-size:9px;color:var(--text-dim);margin-top:4px;}
-  .diesel-scroll{flex:1;overflow-y:auto;}
-  .diesel-scroll::-webkit-scrollbar{width:3px;}
-  .diesel-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
-  .state-row{display:flex;align-items:center;padding:7px 2px;border-bottom:1px solid rgba(26,58,92,.4);gap:6px;}
-  .state-row:last-child{border-bottom:none;}
-  .state-code{font-weight:700;font-size:12px;color:var(--text-bright);width:32px;flex-shrink:0;}
-  .state-name{color:var(--text-dim);font-size:11px;flex:1;font-weight:500;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .state-bar{width:48px;flex-shrink:0;height:3px;background:var(--border2);border-radius:2px;overflow:hidden;}
-  .state-bar-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--blue-dim),var(--blue-bright));}
-  .state-price{font-size:13px;font-weight:700;color:var(--text-bright);min-width:50px;text-align:right;flex-shrink:0;}
-  .cheapest-badge{background:rgba(0,229,160,.15);color:var(--green);border:1px solid var(--green-dim);font-size:8px;font-weight:800;padding:1px 4px;border-radius:2px;margin-left:3px;white-space:nowrap;}
+  .diesel-panel .panel-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
+  .diesel-national{text-align:center;padding:24px;}
+  .diesel-nat-label{font-size:11px;letter-spacing:3px;color:var(--text-dim);text-transform:uppercase;font-weight:600;margin-bottom:12px;}
+  .diesel-nat-value{font-size:clamp(52px,6vw,80px);font-weight:800;color:var(--text-bright);line-height:1;}
+  .diesel-nat-unit{font-size:13px;color:var(--text-dim);margin-top:6px;letter-spacing:2px;font-weight:500;}
+  .diesel-nat-source{font-size:10px;color:var(--text-dim);margin-top:8px;letter-spacing:1px;}
+  .diesel-surcharge{background:linear-gradient(135deg,rgba(30,127,196,.08),rgba(0,229,160,.05));border:1px solid var(--border);border-radius:4px;padding:16px 24px;text-align:center;width:100%;}
+  .diesel-surcharge-label{font-size:10px;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px;}
+  .diesel-surcharge-value{font-size:32px;font-weight:800;color:var(--yellow);}
+  .diesel-surcharge-sub{font-size:10px;color:var(--text-dim);margin-top:4px;}
 
   /* CENTER */
   .center-col{grid-column:2;grid-row:1;display:flex;flex-direction:column;gap:12px;}
@@ -218,24 +211,26 @@
 
 <div class="main">
 
-  <!-- DIESEL -->
+  <!-- DIESEL — nacional apenas -->
   <div class="panel diesel-panel">
     <div class="panel-header">
-      <div class="panel-title">⛽ Diesel Price by State</div>
+      <div class="panel-title">⛽ National Avg Diesel</div>
       <div style="display:flex;align-items:center;gap:8px;">
         <span class="dbadge load" id="dieselBadge">LOADING</span>
-        <span class="panel-badge">$/GAL · PUMP PRICE</span>
+        <span class="panel-badge">$/GAL · AAA DAILY</span>
       </div>
     </div>
     <div class="panel-body">
-      <div class="diesel-hero">
-        <div class="diesel-hero-label">Cheapest Diesel Right Now</div>
-        <div class="diesel-hero-state" id="cheapestState">–</div>
-        <div class="diesel-hero-price" id="cheapestPrice">$–.–––</div>
-        <div class="diesel-hero-sub">Consumer pump price · AI market search</div>
+      <div class="diesel-national">
+        <div class="diesel-nat-label">US National Average</div>
+        <div class="diesel-nat-value" id="dieselNational">$–.–––</div>
+        <div class="diesel-nat-unit">PER GALLON · DIESEL</div>
+        <div class="diesel-nat-source">Source: AAA GasPrices · Updated every 5 min</div>
       </div>
-      <div class="diesel-scroll" id="dieselList">
-        <div style="text-align:center;padding:20px;color:var(--text-dim);font-size:12px;">Searching market data…</div>
+      <div class="diesel-surcharge" style="margin:0 14px 14px;">
+        <div class="diesel-surcharge-label">Fuel Surcharge Index</div>
+        <div class="diesel-surcharge-value" id="dieselSurcharge">–.–%</div>
+        <div class="diesel-surcharge-sub">US carrier fuel surcharge rate</div>
       </div>
     </div>
   </div>
@@ -436,21 +431,15 @@ function setBtn(id, txt, disabled){
 }
 
 function renderDiesel(){
-  if(!dieselStates.length)return;
-  const sorted=[...dieselStates].sort((a,b)=>a.price-b.price);
-  const mn=sorted[0].price, mx=sorted[sorted.length-1].price;
-  document.getElementById('cheapestState').textContent=sorted[0].name.toUpperCase();
-  document.getElementById('cheapestPrice').textContent=`$${sorted[0].price.toFixed(3)}`;
-  document.getElementById('dieselList').innerHTML=sorted.map((s,i)=>{
-    const pct=mx>mn?Math.round(((s.price-mn)/(mx-mn))*100):50;
-    return `<div class="state-row">
-      <span class="state-code">${s.code}</span>
-      <span class="state-name">${s.name}${i===0?'<span class="cheapest-badge">CHEAPEST</span>':''}</span>
-      <div class="state-bar"><div class="state-bar-fill" style="width:${pct}%"></div></div>
-      <span class="state-price">$${s.price.toFixed(3)}</span>
-    </div>`;
-  }).join('');
-  badge('dieselBadge','live','AI LIVE');
+  if(natAvgDiesel != null){
+    document.getElementById('dieselNational').textContent = `${natAvgDiesel.toFixed(3)}`;
+    document.getElementById('dieselSurcharge').textContent = fuelSurcharge != null ? `${fuelSurcharge.toFixed(1)}%` : '–.–%';
+    badge('dieselBadge','live','AAA LIVE');
+  } else {
+    document.getElementById('dieselNational').textContent = '$–.–––';
+    document.getElementById('dieselSurcharge').textContent = '–.–%';
+    badge('dieselBadge','load','SEARCHING');
+  }
 }
 
 function renderRates(){
@@ -572,25 +561,21 @@ function drawAll(){
 }
 
 function processData(d){
-  if(d.diesel?.states){
-    dieselStates=Object.entries(d.diesel.states).filter(([,v])=>v>0).map(([code,price])=>({code,name:STATE_NAMES[code]||code,price:parseFloat(price)}));
-    if(d.diesel.national>0) natAvgDiesel=d.diesel.national;
-  }
-  if(d.stats?.national>0) natAvgDiesel=d.stats.national;
-  if(d.rates){['reefer','dryvan','flatbed'].forEach(t=>{if(d.rates[t]?.current>0) Object.assign(rates[t],d.rates[t]);});}
+  if(d.diesel?.national != null) natAvgDiesel = d.diesel.national;
+  if(d.stats?.national  != null) natAvgDiesel = d.stats.national;
+  if(d.rates){['reefer','dryvan','flatbed'].forEach(t=>{if(d.rates[t]?.current!=null) Object.assign(rates[t],d.rates[t]);});}
   if(d.heatmap?.length){d.heatmap.forEach(item=>{const s=heatMap.find(h=>h.abbr===item.abbr);if(s&&item.rate>0) s.rate=parseFloat(item.rate);});}
   if(d.stats){
-    natAvgDiesel = d.stats.national   ?? null;
-    totalLoads   = d.stats.totalLoads ?? null;
-    tlRatio      = d.stats.tlRatio    ?? null;
-    fuelSurcharge= d.stats.fuelSurcharge ?? null;
+    totalLoads    = d.stats.totalLoads    ?? null;
+    tlRatio       = d.stats.tlRatio       ?? null;
+    fuelSurcharge = d.stats.fuelSurcharge ?? null;
   }
   if(d.news?.length) renderNews(d.news);
-  dHist.push(natAvgDiesel); dHist.shift();
-  lHist.push(totalLoads); lHist.shift();
-  sHist.push(fuelSurcharge); sHist.shift();
+  dHist.push(natAvgDiesel||0); dHist.shift();
+  lHist.push(totalLoads||0);   lHist.shift();
+  sHist.push(fuelSurcharge||0);sHist.shift();
   renderDiesel(); renderRates(); renderHeatmap(); renderStats(); buildTicker(); drawAll();
-  const cached=d.cached?' · cached':'';
+  const cached = d.cached ? ' · cached' : '';
   setStatus(`✅ Updated ${new Date().toLocaleTimeString('en-US',{hour12:false})} · Perplexity AI${cached} · next in 5 min`,'var(--green)');
 }
 
