@@ -207,24 +207,90 @@
 
 <div class="main">
 
-  <!-- DIESEL — nacional apenas -->
-  <div class="panel diesel-panel">
-    <div class="panel-header">
-      <div class="panel-title">⛽ National Avg Diesel</div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span class="dbadge load" id="dieselBadge">LOADING</span>
-        <span class="panel-badge">$/GAL · AAA DAILY</span>
+  <!-- DIESEL + MINI WIDGETS -->
+  <div class="diesel-panel">
+
+    <!-- Widget 1: Diesel nacional -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">⛽ National Avg Diesel</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="dbadge load" id="dieselBadge">LOADING</span>
+          <span class="panel-badge">$/GAL · AAA</span>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="diesel-national">
+          <div class="diesel-nat-label">US National Average</div>
+          <div class="diesel-nat-value" id="dieselNational">$–.–––</div>
+          <div class="diesel-nat-unit">PER GALLON · DIESEL</div>
+          <div class="diesel-nat-source">Source: AAA GasPrices · Updated every 5 min</div>
+          <div class="diesel-nat-surcharge" id="dieselSurchargeInline">Fuel Surcharge: –.–%</div>
+        </div>
       </div>
     </div>
-    <div class="panel-body">
-      <div class="diesel-national">
-        <div class="diesel-nat-label">US National Average</div>
-        <div class="diesel-nat-value" id="dieselNational">$–.–––</div>
-        <div class="diesel-nat-unit">PER GALLON · DIESEL</div>
-        <div class="diesel-nat-source">Source: AAA GasPrices · Updated every 5 min</div>
-        <div class="diesel-nat-surcharge" id="dieselSurchargeInline">Fuel Surcharge: –.–%</div>
+
+    <!-- Widget 2: Spot Rate Summary -->
+    <div class="mini-widget blue">
+      <div class="mini-widget-title">📊 Rate Summary</div>
+      <div class="mini-row">
+        <span class="mini-row-label">❄️ Reefer RPM</span>
+        <span class="mini-row-val" id="summaryReefer">$–.––</span>
+      </div>
+      <div class="mini-row">
+        <span class="mini-row-label">📦 Dry Van RPM</span>
+        <span class="mini-row-val" id="summaryDryvan">$–.––</span>
+      </div>
+      <div class="mini-row">
+        <span class="mini-row-label">🔩 Flatbed RPM</span>
+        <span class="mini-row-val" id="summaryFlatbed">$–.––</span>
       </div>
     </div>
+
+    <!-- Widget 3: Market Signal -->
+    <div class="mini-widget green">
+      <div class="mini-widget-title">📡 Market Signal</div>
+      <div class="market-signal">
+        <div class="signal-label">Reefer Market Condition</div>
+        <div class="signal-value" id="marketSignalVal" style="color:var(--orange)">–</div>
+        <div class="signal-sub" id="marketSignalSub">T/L Ratio loading…</div>
+      </div>
+    </div>
+
+    <!-- Widget 4: Week Changes -->
+    <div class="mini-widget orange">
+      <div class="mini-widget-title">📈 Week over Week</div>
+      <div class="mini-row">
+        <span class="mini-row-label">❄️ Reefer</span>
+        <span class="mini-row-val" id="wowReefer">–</span>
+      </div>
+      <div class="mini-row">
+        <span class="mini-row-label">📦 Dry Van</span>
+        <span class="mini-row-val" id="wowDryvan">–</span>
+      </div>
+      <div class="mini-row">
+        <span class="mini-row-label">🔩 Flatbed</span>
+        <span class="mini-row-val" id="wowFlatbed">–</span>
+      </div>
+    </div>
+
+    <!-- Widget 5: Top Markets -->
+    <div class="mini-widget yellow">
+      <div class="mini-widget-title">🏆 Top Markets</div>
+      <div class="mini-row">
+        <span class="mini-row-label">❄️ Reefer</span>
+        <span class="mini-row-val neutral" id="topReefer">–</span>
+      </div>
+      <div class="mini-row">
+        <span class="mini-row-label">📦 Dry Van</span>
+        <span class="mini-row-val neutral" id="topDryvan">–</span>
+      </div>
+      <div class="mini-row">
+        <span class="mini-row-label">🔩 Flatbed</span>
+        <span class="mini-row-val neutral" id="topFlatbed">–</span>
+      </div>
+    </div>
+
   </div>
 
   <!-- CENTER -->
@@ -566,7 +632,7 @@ function processData(d){
   dHist.push(natAvgDiesel||0); dHist.shift();
   lHist.push(totalLoads||0);   lHist.shift();
   sHist.push(fuelSurcharge||0);sHist.shift();
-  renderDiesel(); renderRates(); renderHeatmap(); renderStats(); buildTicker(); drawAll();
+  renderDiesel(); renderMiniWidgets(); renderRates(); renderHeatmap(); renderStats(); buildTicker(); drawAll();
   const cached = d.cached ? ' · cached' : '';
   setStatus(`✅ Updated ${new Date().toLocaleTimeString('en-US',{hour12:false})} · Perplexity AI${cached} · next in 5 min`,'var(--green)');
 }
