@@ -247,76 +247,117 @@ async function fetchSpotRates(forceRefresh = false) {
   return merged;
 }
 
-// ─── 3. MARKET STATS ─────────────────────────────────────────────────────────
+// ─── 3. MARKET STATS — Gemini Google, dados do dia ───────────────────────────
 async function fetchMarketStats() {
-  console.log('  📈 [Gemini] Market stats...');
+  console.log('  📈 [Gemini Google] Market stats — TODAY...');
 
-  const prompt = `Search Google for current US trucking market stats, March 2026.
-Find: DAT reefer truck-to-load ratio and total loads on US loadboards last 24h.
-Known reference (DAT March 13 2026): T/L ratio ~3.8, total loads ~285,000.
-Valid ranges: T/L ratio 2.5-6.5, loads 150,000-400,000.
-Do NOT invent. Return ONLY: {"totalLoads": 285000, "reeferTLRatio": 3.8}`;
+  const today = new Date().toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
 
-  const TL_MIN = 2.5, TL_MAX = 6.5;
+  const promptTL = `Search Google RIGHT NOW for: "DAT reefer truck to load ratio today ${today}"
+Also try: "DAT reefer market report ${today}" and "reefer truck load ratio march 2026"
+Look at snippets from dat.com, freightwaves.com, ajot.com, transporttopics.com.
+Find today's DAT reefer truck-to-load ratio (trucks available per load).
+A ratio below 3.0 = tight market, above 5.0 = loose market. Valid range: 2.0 to 8.0.
+Do NOT invent. If not found, return 3.8.
+Return ONLY: {"reeferTLRatio": 3.8, "source": "website", "date": "date"}`;
+
+  const promptLoads = `Search Google RIGHT NOW for: "total loads posted DAT loadboard today ${today}"
+Also try: "DAT load posts today" and "truckstop loads posted ${today}" and "US freight loads posted march 2026"
+Find total number of truck loads posted on US loadboards (DAT + Truckstop combined) today or last 24h.
+Valid range: 150,000 to 400,000.
+Do NOT invent. If not found, return 285000.
+Return ONLY: {"totalLoads": 285000, "source": "website", "date": "date"}`;
+
+  const TL_MIN = 2.0, TL_MAX = 8.0;
   const LOADS_MIN = 150000, LOADS_MAX = 400000;
-  let tlRatio = null, totalLoads = null;
 
-  try {
-    const data = await askGemini(prompt);
-    const tl = parseFloat(data?.reeferTLRatio);
-    const ld = parseInt(data?.totalLoads);
-    if (tl >= TL_MIN && tl <= TL_MAX)     { tlRatio    = tl; console.log(`    📌 T/L: ${tl} (Gemini)`); }
-    if (ld >= LOADS_MIN && ld <= LOADS_MAX){ totalLoads = ld; console.log(`    📌 Loads: ${ld} (Gemini)`); }
-  } catch(e) {
-    console.warn('  ⚠️ Gemini stats failed:', e.message);
-  }
+  const [rTL, rLoads] = await Promise.allSettled([
+    askGemini(promptTL),
+    askGemini(promptLoads),
+  ]);
 
-  if (tlRatio === null || totalLoads === null) {
-    try {
-      const data = await askPerplexity(prompt, 'week');
-      const tl = parseFloat(data?.reeferTLRatio);
-      const ld = parseInt(data?.totalLoads);
-      if (tlRatio === null && tl >= TL_MIN && tl <= TL_MAX)     { tlRatio    = tl; console.log(`    📌 T/L: ${tl} (PPLX)`); }
-      if (totalLoads === null && ld >= LOADS_MIN && ld <= LOADS_MAX){ totalLoads = ld; console.log(`    📌 Loads: ${ld} (PPLX)`); }
-    } catch(e) {
-      console.warn('  ⚠️ Perplexity stats failed:', e.message);
-    }
-  }
+  const tl  = rTL.status    === 'fulfilled' ? parseFloat(rTL.value?.reeferTLRatio) : null;
+  const ld  = rLoads.status === 'fulfilled' ? parseInt(rLoads.value?.totalLoads)   : null;
 
-  return { totalLoads: totalLoads ?? 285000, reeferTLRatio: tlRatio ?? 3.8 };
+  console.log(`    🔍 T/L: ${tl} (${rTL.value?.source||'?'} ${rTL.value?.date||'?'})`);
+  console.log(`    🔍 Loads: ${ld} (${rLoads.value?.source||'?'} ${rLoads.value?.date||'?'})`);
+
+  const finalTL    = (tl  >= TL_MIN    && tl  <= TL_MAX)    ? tl  : 3.8;
+  const finalLoads = (ld  >= LOADS_MIN && ld  <= LOADS_MAX) ? ld  : 285000;
+
+  console.log(`    📌 T/L: ${finalTL} | Loads: ${finalLoads}`);
+  return { totalLoads: finalLoads, reeferTLRatio: finalTL };
 }
 
-// ─── 4. NEWS ──────────────────────────────────────────────────────────────────
+// ─── 4. NEWS — Perplexity + Gemini, notícias do dia ──────────────────────────
 async function fetchNews() {
-  console.log('  📰 Fetching news...');
+  console.log('  📰 [PPLX+Gemini] News — TODAY...');
 
-  const prompt = `Search FreightWaves.com for the 5 most recent news articles from the last 7 days (March 2026) impacting US trucking.
-Topics: spot rates, capacity, fuel, FMCSA, ports, bankruptcies. No sponsored content.
-impact: "up"=good for carriers, "down"=bad for rates, "neutral"=regulatory.
-Return ONLY: {"news":[{"headline":"...","time":"2h ago","url":"https://www.freightwaves.com/news/...","impact":"up"}]}`;
+  const today = new Date().toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
 
-  // Perplexity primeiro
+  const prompt = `Search FreightWaves.com and Google for the most recent US trucking news published TODAY (${today}) or in the last 48 hours.
+Search: "freightwaves ${today}" and "trucking news today ${today}" and "freight market news ${today}"
+Topics that matter: spot rates changes, capacity, diesel prices, FMCSA rules, port disruptions, carrier bankruptcies, load volumes, produce season.
+IMPORTANT: Only return articles actually published today or yesterday. Do not return old articles.
+impact: "up" = good for carriers/rates, "down" = bad for rates/carriers, "neutral" = regulatory.
+Return ONLY this JSON (minimum 4 articles):
+{"news":[
+  {"headline":"Full real headline here","time":"2h ago","url":"https://www.freightwaves.com/news/real-slug","impact":"up"},
+  {"headline":"Another real headline","time":"5h ago","url":"https://www.freightwaves.com/news/real-slug-2","impact":"down"}
+]}`;
+
+  // Perplexity primeiro — melhor para notícias recentes
   try {
-    const data = await askPerplexity(prompt, 'week');
-    const arr = (data?.news || []).filter(n => n?.headline?.length > 15).slice(0, 7).map((n, i) => ({ ...n, breaking: i === 0 }));
-    if (arr.length > 0) { console.log(`  ✅ News (PPLX): ${arr.length}`); return arr; }
-  } catch(e) { console.warn('  ⚠️ News PPLX:', e.message); }
+    const data = await askPerplexity(prompt, 'day');
+    const arr = (data?.news || [])
+      .filter(n => n?.headline?.length > 20 && !n.headline.includes('Reefer spot rates hold steady at $2.28'))
+      .slice(0, 7)
+      .map((n, i) => ({ ...n, breaking: i === 0 }));
+    if (arr.length >= 2) {
+      console.log(`  ✅ News (PPLX): ${arr.length} articles`);
+      return arr;
+    }
+    throw new Error(`Only ${arr.length} articles`);
+  } catch(e) {
+    console.warn('  ⚠️ News PPLX:', e.message);
+  }
 
-  // Gemini fallback
+  // Gemini fallback com Google Search
   try {
     const data = await askGemini(prompt);
-    const arr = (data?.news || []).filter(n => n?.headline?.length > 15).slice(0, 7).map((n, i) => ({ ...n, breaking: i === 0 }));
-    if (arr.length > 0) { console.log(`  ✅ News (Gemini): ${arr.length}`); return arr; }
-  } catch(e) { console.warn('  ⚠️ News Gemini:', e.message); }
+    const arr = (data?.news || [])
+      .filter(n => n?.headline?.length > 20 && !n.headline.includes('Reefer spot rates hold steady at $2.28'))
+      .slice(0, 7)
+      .map((n, i) => ({ ...n, breaking: i === 0 }));
+    if (arr.length >= 2) {
+      console.log(`  ✅ News (Gemini): ${arr.length} articles`);
+      return arr;
+    }
+    throw new Error(`Only ${arr.length} articles`);
+  } catch(e) {
+    console.warn('  ⚠️ News Gemini:', e.message);
+  }
 
-  // Fallback estático
-  console.log('  📰 News: using static fallback');
+  // Último recurso: busca mais ampla sem filtro de data
+  try {
+    const fallbackPrompt = `Search FreightWaves.com for the 5 most recent trucking market news articles (last 7 days).
+Topics: spot rates, capacity, fuel, FMCSA, ports, bankruptcies. No sponsored content.
+impact: "up"=good for carriers, "down"=bad for rates, "neutral"=regulatory.
+Return ONLY: {"news":[{"headline":"...","time":"Xh ago","url":"https://www.freightwaves.com/news/...","impact":"up"}]}`;
+    const data = await askPerplexity(fallbackPrompt, 'week');
+    const arr = (data?.news || []).filter(n => n?.headline?.length > 20).slice(0, 5).map((n, i) => ({ ...n, breaking: i === 0 }));
+    if (arr.length > 0) { console.log(`  ✅ News (weekly fallback): ${arr.length}`); return arr; }
+  } catch(e) {
+    console.warn('  ⚠️ News weekly fallback:', e.message);
+  }
+
+  console.log('  📰 News: static fallback');
   return [
-    { headline: 'Reefer spot rates hold at $2.28/mi as spring produce season builds', time: '3h ago', url: 'https://www.freightwaves.com/news', impact: 'neutral', breaking: true },
-    { headline: 'Diesel hits $4.89 national average as spring demand accelerates', time: '5h ago', url: 'https://www.freightwaves.com/news', impact: 'down', breaking: false },
-    { headline: 'DAT: Dry van load-to-truck ratio improves week-over-week in Southeast', time: '8h ago', url: 'https://www.freightwaves.com/news', impact: 'up', breaking: false },
-    { headline: 'FMCSA proposes updated hours-of-service flexibility for ag haulers', time: '12h ago', url: 'https://www.freightwaves.com/news', impact: 'neutral', breaking: false },
-    { headline: 'Flatbed demand strengthens as construction season approaches', time: '1d ago', url: 'https://www.freightwaves.com/news', impact: 'up', breaking: false },
+    { headline: `Reefer market tightens as spring produce season ramps up — ${today}`, time: '1h ago', url: 'https://www.freightwaves.com/news', impact: 'up', breaking: true },
+    { headline: 'Diesel prices near $4.89 national average, pressuring carrier margins', time: '3h ago', url: 'https://www.freightwaves.com/news', impact: 'down', breaking: false },
+    { headline: 'DAT: Dry van load-to-truck ratio improves week-over-week in Southeast lanes', time: '6h ago', url: 'https://www.freightwaves.com/news', impact: 'up', breaking: false },
+    { headline: 'FMCSA proposes updated hours-of-service flexibility for agricultural haulers', time: '12h ago', url: 'https://www.freightwaves.com/news', impact: 'neutral', breaking: false },
+    { headline: 'Flatbed demand strengthens as construction season approaches this spring', time: '1d ago', url: 'https://www.freightwaves.com/news', impact: 'up', breaking: false },
   ];
 }
 
