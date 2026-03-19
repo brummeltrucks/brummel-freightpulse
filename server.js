@@ -185,54 +185,63 @@ Use the exact current number from AAA. Do not use EIA data.`, 'day');
   }
 }
 
-// ─── 2. SPOT RATES — Gemini Search + Perplexity fallback ─────────────────────
+// ─── 2. SPOT RATES — Gemini scrapa Google snippets públicos ──────────────────
 async function fetchSpotRates(forceRefresh = false) {
   if (!forceRefresh && isRatesFresh()) {
     console.log('  📊 Rates: cache hit');
     return ratesCache.data;
   }
-  console.log('  📊 [Gemini+PPLX] Spot rates...');
+  console.log('  📊 [Gemini Google scrape] Spot rates...');
 
   const RNG = { reefer:[1.80,2.60], dryvan:[1.50,2.30], flatbed:[1.70,2.45] };
 
-  const prompt = `Search Google for the most recent US national average truck spot rates per loaded mile, March 2026.
-Search: "DAT spot rates march 2026" on freightwaves.com, ajot.com, dat.com blog.
-Last known DAT data (week March 7-13 2026): Reefer $2.28, Dry Van $1.92, Flatbed $2.15.
-IMPORTANT: Do NOT invent values. If no newer data, return exact known values.
-Valid ranges only: Reefer $1.80-$2.60, DryVan $1.50-$2.30, Flatbed $1.70-$2.45.
-Return ONLY JSON (numbers, no $ signs):
-{"reefer":{"current":2.28,"high7d":2.60,"low7d":1.90,"changeWow":0.05,"loads":4500,"topMarket":"Chicago, IL"},"dryvan":{"current":1.92,"high7d":2.20,"low7d":1.60,"changeWow":0.08,"loads":6200,"topMarket":"Atlanta, GA"},"flatbed":{"current":2.15,"high7d":2.50,"low7d":1.80,"changeWow":0.07,"loads":2900,"topMarket":"Dallas, TX"}}`;
+  // 3 queries separadas e específicas — aumenta chance de achar snippet público
+  const queries = [
+    `Search Google for exactly this query: "DAT reefer spot rate per mile 2026"
+     Look at the Google search result snippets, featured boxes, and any preview text from dat.com, freightwaves.com, ajot.com, or transporttopics.com.
+     Find the most recent published national average reefer spot rate per loaded mile.
+     Return ONLY: {"rate": 2.28, "source": "site name", "date": "date found"}`,
 
-  let data = null;
+    `Search Google for exactly this query: "dry van spot rate per mile march 2026 DAT"
+     Look at Google snippets and preview text from dat.com, freightwaves.com, ajot.com, overdriveonline.com.
+     Find the most recent dry van national average spot rate per loaded mile.
+     Return ONLY: {"rate": 1.92, "source": "site name", "date": "date found"}`,
 
-  // Tenta Gemini com Google Search
-  try {
-    data = await askGemini(prompt);
-    console.log(`    ✅ Gemini: reefer=$${data?.reefer?.current} dryvan=$${data?.dryvan?.current} flatbed=$${data?.flatbed?.current}`);
-  } catch(e) {
-    console.warn('    ⚠️ Gemini failed:', e.message);
-  }
+    `Search Google for exactly this query: "flatbed spot rate per mile 2026 national average DAT"
+     Look at Google snippets from dat.com, freightwaves.com, ajot.com, truckingnews.com.
+     Find the most recent flatbed national average spot rate per loaded mile.
+     Return ONLY: {"rate": 2.15, "source": "site name", "date": "date found"}`,
+  ];
 
-  // Fallback: Perplexity
-  if (!data) {
-    try {
-      data = await askPerplexity(prompt, 'week');
-      console.log(`    ✅ Perplexity: reefer=$${data?.reefer?.current}`);
-    } catch(e) {
-      console.warn('    ⚠️ Perplexity failed:', e.message);
-    }
-  }
+  // Roda as 3 queries em paralelo no Gemini
+  const [rR, rD, rF] = await Promise.allSettled([
+    askGemini(queries[0]),
+    askGemini(queries[1]),
+    askGemini(queries[2]),
+  ]);
 
-  const merged = {};
+  const reeferVal  = rR.status==='fulfilled' ? parseFloat(rR.value?.rate) : null;
+  const dryvanVal  = rD.status==='fulfilled' ? parseFloat(rD.value?.rate) : null;
+  const flatbedVal = rF.status==='fulfilled' ? parseFloat(rF.value?.rate) : null;
+
+  console.log(`    🔍 Google scrape: reefer=${reeferVal} dryvan=${dryvanVal} flatbed=${flatbedVal}`);
+  console.log(`    📍 Sources: ${rR.value?.source||'?'} | ${rD.value?.source||'?'} | ${rF.value?.source||'?'}`);
+
+  const merged = {
+    reefer:  (reeferVal  >= RNG.reefer[0]  && reeferVal  <= RNG.reefer[1])
+              ? { ...FALLBACK_RATES.reefer,  current: reeferVal  }
+              : { ...FALLBACK_RATES.reefer  },
+    dryvan:  (dryvanVal  >= RNG.dryvan[0]  && dryvanVal  <= RNG.dryvan[1])
+              ? { ...FALLBACK_RATES.dryvan,  current: dryvanVal  }
+              : { ...FALLBACK_RATES.dryvan  },
+    flatbed: (flatbedVal >= RNG.flatbed[0] && flatbedVal <= RNG.flatbed[1])
+              ? { ...FALLBACK_RATES.flatbed, current: flatbedVal }
+              : { ...FALLBACK_RATES.flatbed },
+  };
+
   ['reefer','dryvan','flatbed'].forEach(t => {
-    const v = parseFloat(data?.[t]?.current);
-    if (data && v >= RNG[t][0] && v <= RNG[t][1]) {
-      merged[t] = { ...FALLBACK_RATES[t], ...data[t], current: v };
-      console.log(`    📌 ${t}: $${v} (AI)`);
-    } else {
-      merged[t] = { ...FALLBACK_RATES[t] };
-      console.log(`    📌 ${t}: $${FALLBACK_RATES[t].current} (fallback${data ? ` — AI=${v}` : ''})`);
-    }
+    const isReal = merged[t].current !== FALLBACK_RATES[t].current;
+    console.log(`    📌 ${t}: ${merged[t].current} (${isReal ? 'Google scrape ✅' : 'fallback'})`);
   });
 
   ratesCache = { data: merged, ts: Date.now() };
