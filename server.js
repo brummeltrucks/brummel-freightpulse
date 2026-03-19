@@ -385,8 +385,18 @@ async function buildData(forceRates = false) {
 }
 
 // ─── ROUTES ───────────────────────────────────────────────────────────────────
+const EMPTY_RESPONSE = {
+  ok: true,
+  diesel:  { national: null, states: {}, period: 'unavailable' },
+  rates:   { reefer: FALLBACK_RATES.reefer, dryvan: FALLBACK_RATES.dryvan, flatbed: FALLBACK_RATES.flatbed },
+  heatmap: [],
+  news:    [],
+  stats:   { national: null, totalLoads: null, tlRatio: null, fuelSurcharge: null },
+  source:  'Perplexity AI + Gemini Search',
+  ts:      new Date().toISOString(),
+};
 
-// Auto-refresh a cada 5 min — usa cache de rates (3h)
+// Auto-refresh a cada 5 min
 app.post('/api/data', async (req, res) => {
   if (isFresh()) return res.json({ ...cache.data, cached: true });
   try {
@@ -395,27 +405,28 @@ app.post('/api/data', async (req, res) => {
     res.json(result);
   } catch(e) {
     console.error('❌ /api/data:', e.message);
-    if (cache.data) return res.json({ ...cache.data, cached: true, stale: true });
-    res.status(502).json({ ok: false, error: e.message });
+    const fallback = cache.data || EMPTY_RESPONSE;
+    res.json({ ...fallback, cached: true, stale: true });
   }
 });
 
-// Botão REFRESH — invalida TODOS os caches e busca tudo de novo
+// Botão REFRESH — limpa caches e busca tudo novo, NUNCA retorna 502
 app.post('/api/refresh', async (req, res) => {
-  console.log('🔁 Manual REFRESH — clearing ALL caches');
+  console.log('🔁 Manual REFRESH');
   cache      = { data: null, ts: 0 };
   ratesCache = { data: null, ts: 0 };
   try {
-    const result = await buildData(true); // forceRates=true
+    const result = await buildData(true);
     cache = { data: result, ts: Date.now() };
     res.json(result);
   } catch(e) {
-    console.error('❌ /api/refresh:', e.message);
-    res.status(502).json({ ok: false, error: e.message });
+    console.error('❌ /api/refresh crashed:', e.message);
+    // Nunca retorna 502 — retorna resposta vazia com ok:true
+    res.json({ ...EMPTY_RESPONSE, ts: new Date().toISOString() });
   }
 });
 
-// Botão UPDATE RATES — força só os rates
+// Botão UPDATE RATES
 app.post('/api/force-rates', async (req, res) => {
   console.log('⚡ Force rates refresh');
   ratesCache = { data: null, ts: 0 };
@@ -427,29 +438,21 @@ app.post('/api/force-rates', async (req, res) => {
       flatbed: { current: ratesRaw.flatbed.current, high: ratesRaw.flatbed.high7d, low: ratesRaw.flatbed.low7d, change: ratesRaw.flatbed.changeWow, loads: ratesRaw.flatbed.loads, best: ratesRaw.flatbed.topMarket },
     };
     if (cache.data) {
-      cache.data.rates = rates;
-      cache.data.heatmap = buildHeatmap(ratesRaw.reefer.current || 2.28);
+      cache.data.rates   = rates;
+      cache.data.heatmap = buildHeatmap(ratesRaw.reefer.current);
     }
     res.json({ ok: true, rates, ts: new Date().toISOString() });
   } catch(e) {
     console.error('❌ /api/force-rates:', e.message);
-    const rates = {
-      reefer:  { current: FALLBACK_RATES.reefer.current,  high: FALLBACK_RATES.reefer.high7d,  low: FALLBACK_RATES.reefer.low7d,  change: FALLBACK_RATES.reefer.changeWow,  loads: FALLBACK_RATES.reefer.loads,  best: FALLBACK_RATES.reefer.topMarket  },
-      dryvan:  { current: FALLBACK_RATES.dryvan.current,  high: FALLBACK_RATES.dryvan.high7d,  low: FALLBACK_RATES.dryvan.low7d,  change: FALLBACK_RATES.dryvan.changeWow,  loads: FALLBACK_RATES.dryvan.loads,  best: FALLBACK_RATES.dryvan.topMarket  },
-      flatbed: { current: FALLBACK_RATES.flatbed.current, high: FALLBACK_RATES.flatbed.high7d, low: FALLBACK_RATES.flatbed.low7d, change: FALLBACK_RATES.flatbed.changeWow, loads: FALLBACK_RATES.flatbed.loads, best: FALLBACK_RATES.flatbed.topMarket },
-    };
-    if (cache.data) cache.data.rates = rates;
-    res.json({ ok: true, rates, fallback: true, ts: new Date().toISOString() });
+    res.json({ ok: true, rates: EMPTY_RESPONSE.rates, fallback: true, ts: new Date().toISOString() });
   }
 });
 
 app.get('/api/health', (_, res) => res.json({
   ok: true, ts: new Date().toISOString(),
   hasPPLX: !!PPLX_KEY, hasGemini: !!GEMINI_KEY,
-  cacheAge:      cache.ts      ? Math.round((Date.now()-cache.ts)/1000)+'s'        : 'empty',
-  ratesCacheAge: ratesCache.ts ? Math.round((Date.now()-ratesCache.ts)/1000/60)+'min' : 'empty',
-  ratesCacheOk:  isRatesFresh(),
-  nextRatesIn:   ratesCache.ts ? Math.round((TTL_RATES-(Date.now()-ratesCache.ts))/1000/60)+'min' : 'now',
+  cacheAge:  cache.ts ? Math.round((Date.now()-cache.ts)/1000)+'s' : 'empty',
+  cacheOk:   isFresh(),
 }));
 
 app.listen(PORT, () => console.log(`✅ Brummel FreightPulse on port ${PORT}`));
