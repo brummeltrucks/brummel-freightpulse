@@ -456,13 +456,14 @@ function renderDiesel(){
 function renderRates(){
   document.getElementById('rateTs').textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
   ['reefer','dryvan','flatbed'].forEach(t=>{
-    const r=rates[t]; if(!r.current)return;
-    document.getElementById(`${t}Rate`).textContent=`$${r.current.toFixed(2)}`;
-    document.getElementById(`${t}High`).textContent=r.high?`$${r.high.toFixed(2)}`:'–';
-    document.getElementById(`${t}Low`).textContent=r.low?`$${r.low.toFixed(2)}`:'–';
+    const r=rates[t];
+    document.getElementById(`${t}Rate`).textContent=r.current!=null?`${r.current.toFixed(2)}`:'$–.––';
+    document.getElementById(`${t}High`).textContent=r.high!=null?`${r.high.toFixed(2)}`:'–';
+    document.getElementById(`${t}Low`).textContent=r.low!=null?`${r.low.toFixed(2)}`:'–';
     const ce=document.getElementById(`${t}Change`);
-    if(r.change!=null){ce.textContent=`${r.change>=0?'+':''}$${r.change.toFixed(2)}`;ce.className=`rate-stat-val ${r.change>=0?'up':'down'}`;}
-    document.getElementById(`${t}Loads`).textContent=r.loads?(r.loads/1000).toFixed(1)+'K':'–';
+    if(r.change!=null){ce.textContent=`${r.change>=0?'+':''}${r.change.toFixed(2)}`;ce.className=`rate-stat-val ${r.change>=0?'up':'down'}`;}
+    else{ce.textContent='–';ce.className='rate-stat-val';}
+    document.getElementById(`${t}Loads`).textContent=r.loads!=null?(r.loads/1000).toFixed(1)+'K':'–';
     document.getElementById(`${t}Best`).textContent=r.best||'–';
   });
   badge('ratesBadge','live','AI LIVE');
@@ -505,25 +506,37 @@ function renderNews(items){
 }
 
 function renderStats(){
-  if(natAvgDiesel>0){
-    document.getElementById('natDiesel').textContent=`$${natAvgDiesel.toFixed(3)}`;
+  if(natAvgDiesel!=null){
+    document.getElementById('natDiesel').textContent=`${natAvgDiesel.toFixed(3)}`;
     document.getElementById('natDieselDelta').innerHTML=`<span style="color:var(--text-dim);font-size:10px">Consumer pump price · US national avg</span>`;
+  } else {
+    document.getElementById('natDiesel').textContent='$–.–––';
+    document.getElementById('natDieselDelta').innerHTML=`<span style="color:var(--orange);font-size:10px">Searching…</span>`;
   }
-  if(totalLoads>0){
+  if(totalLoads!=null){
     document.getElementById('totalLoads').textContent=(totalLoads/1000).toFixed(1)+'K';
     document.getElementById('loadsDelta').innerHTML=`<span style="color:var(--text-dim);font-size:10px">All loadboards · last 24h</span>`;
+  } else {
+    document.getElementById('totalLoads').textContent='–';
+    document.getElementById('loadsDelta').innerHTML=`<span style="color:var(--orange);font-size:10px">Searching…</span>`;
   }
-  if(tlRatio>0){
+  if(tlRatio!=null){
     document.getElementById('tlRatio').textContent=tlRatio.toFixed(2);
     const rc=tlRatio<3?'var(--red)':tlRatio>5?'var(--green)':'var(--orange)';
     const rl=tlRatio<3?'TIGHT':tlRatio>5?'LOOSE':'BALANCED';
     document.getElementById('ratioDelta').innerHTML=`<span style="color:${rc}">${rl} MARKET</span>`;
     document.getElementById('ratioGauge').style.cssText=`background:${rc};width:${Math.min((tlRatio/8)*100,100)}%`;
     document.getElementById('ratioLabel').textContent=rl;
+  } else {
+    document.getElementById('tlRatio').textContent='–.––';
+    document.getElementById('ratioDelta').innerHTML=`<span style="color:var(--orange);font-size:10px">Searching…</span>`;
   }
-  if(fuelSurcharge>0){
+  if(fuelSurcharge!=null){
     document.getElementById('fuelSurcharge').textContent=fuelSurcharge.toFixed(1)+'%';
     document.getElementById('surchargeDelta').innerHTML=`<span style="color:var(--text-dim);font-size:10px">US carrier fuel surcharge rate</span>`;
+  } else {
+    document.getElementById('fuelSurcharge').textContent='–.–%';
+    document.getElementById('surchargeDelta').innerHTML=`<span style="color:var(--orange);font-size:10px">Searching…</span>`;
   }
 }
 
@@ -567,9 +580,10 @@ function processData(d){
   if(d.rates){['reefer','dryvan','flatbed'].forEach(t=>{if(d.rates[t]?.current>0) Object.assign(rates[t],d.rates[t]);});}
   if(d.heatmap?.length){d.heatmap.forEach(item=>{const s=heatMap.find(h=>h.abbr===item.abbr);if(s&&item.rate>0) s.rate=parseFloat(item.rate);});}
   if(d.stats){
-    if(d.stats.totalLoads>0) totalLoads=d.stats.totalLoads;
-    if(d.stats.tlRatio>0) tlRatio=d.stats.tlRatio;
-    if(d.stats.fuelSurcharge>0) fuelSurcharge=d.stats.fuelSurcharge;
+    natAvgDiesel = d.stats.national   ?? null;
+    totalLoads   = d.stats.totalLoads ?? null;
+    tlRatio      = d.stats.tlRatio    ?? null;
+    fuelSurcharge= d.stats.fuelSurcharge ?? null;
   }
   if(d.news?.length) renderNews(d.news);
   dHist.push(natAvgDiesel); dHist.shift();
