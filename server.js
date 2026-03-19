@@ -45,7 +45,7 @@ async function askPerplexity(prompt, recency = 'day') {
         { role: 'system', content: 'You are a freight market data API. Search the web for real current data. Return ONLY valid JSON, no markdown, no explanation, no extra text.' },
         { role: 'user', content: prompt },
       ],
-      temperature: 0.1, max_tokens: 2000, search_recency_filter: recency,
+      temperature: 0.1, max_tokens: 4000, search_recency_filter: recency,
     }),
   }, 25000);
   if (!r.ok) throw new Error(`Perplexity ${r.status}`);
@@ -110,15 +110,30 @@ Return ONLY this exact JSON structure (use null for any value you cannot find):
   }
 }
 
-// ─── FETCH NEWS SEPARATELY (fallback se não veio no batch) ────────────────────
-async function fetchNewsOnly() {
-  console.log('  📰 Fetching news separately...');
+// ─── FETCH RATES SEPARADO ─────────────────────────────────────────────────────
+async function fetchRatesOnly() {
   const today = new Date().toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
+  console.log('  📊 Fetching rates separately...');
+  const data = await askPerplexity(
+    `Search the web for current US truck spot rates per loaded mile, week of ${today}.
+Search: freightwaves.com, ajot.com, dat.com, transporttopics.com for "DAT spot rates" or "broker spot rates".
+Find national averages for reefer, dry van, and flatbed.
+Typical current ranges: reefer $2.10-$2.50, dry van $1.80-$2.20, flatbed $2.00-$2.40.
+Return ONLY this JSON with real numbers (not null):
+{"reefer":{"current":2.28,"high7d":2.60,"low7d":1.90,"changeWow":0.05,"loads":4500,"topMarket":"Chicago, IL"},"dryvan":{"current":1.92,"high7d":2.20,"low7d":1.60,"changeWow":0.08,"loads":6200,"topMarket":"Atlanta, GA"},"flatbed":{"current":2.15,"high7d":2.50,"low7d":1.80,"changeWow":0.07,"loads":2900,"topMarket":"Dallas, TX"}}`, 'week');
+  console.log(`  📊 Rates: reefer=${data?.reefer?.current} dv=${data?.dryvan?.current} fb=${data?.flatbed?.current}`);
+  return data;
+}
+
+// ─── FETCH NEWS SEPARADO ──────────────────────────────────────────────────────
+async function fetchNewsOnly() {
+  const today = new Date().toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
+  console.log('  📰 Fetching news...');
   const d = await askPerplexity(
-    `Search FreightWaves.com for 5 real news articles published today or yesterday (${today}) about US trucking market.
-Topics: spot rates, capacity, fuel, FMCSA, ports, bankruptcies. No sponsored content.
-impact: "up"=good for carriers, "down"=bad for rates, "neutral"=regulatory.
-Return ONLY: {"news":[{"headline":"...","time":"2h ago","url":"https://www.freightwaves.com/news/...","impact":"up"}]}`, 'day');
+    `Search FreightWaves.com for 4 real news articles published this week (${today}) about US trucking.
+Topics: spot rates, fuel prices, capacity, FMCSA, ports, bankruptcies.
+impact: up=good for carriers, down=bad for rates, neutral=regulatory.
+Return ONLY: {"news":[{"headline":"headline text","time":"2h ago","url":"https://www.freightwaves.com/news/slug","impact":"up"}]}`, 'week');
   return (d?.news || []).filter(n => n?.headline?.length > 20).slice(0, 5).map((n, i) => ({ ...n, breaking: i === 0 }));
 }
 
@@ -132,66 +147,54 @@ function validateNumber(val, min, max) {
 async function buildData() {
   const start = Date.now();
 
-  // Tenta buscar tudo em uma chamada
-  let raw = null;
-  try {
-    raw = await fetchAllMarketData();
-  } catch(e) {
-    console.error('  ❌ Batch fetch failed:', e.message);
-  }
+  // Roda as 3 chamadas em paralelo
+  const [rMain, rRates, rNews] = await Promise.allSettled([
+    fetchAllMarketData(),
+    fetchRatesOnly(),
+    fetchNewsOnly(),
+  ]);
 
-  // Valida cada campo individualmente
-  const diesel     = validateNumber(raw?.diesel,      3.50, 7.00);
-  const reeferCur  = validateNumber(raw?.reefer?.current,  1.80, 2.80);
-  const dryvanCur  = validateNumber(raw?.dryvan?.current,  1.50, 2.50);
-  const flatbedCur = validateNumber(raw?.flatbed?.current, 1.70, 2.60);
-  const tlRatio    = validateNumber(raw?.tlRatio,     2.0,  8.0);
-  const totalLoads = validateNumber(raw?.totalLoads,  100000, 500000);
+  const main  = rMain.status  === 'fulfilled' ? rMain.value  : null;
+  const rates = rRates.status === 'fulfilled' ? rRates.value : null;
+  const news  = rNews.status  === 'fulfilled' ? rNews.value  : [];
 
-  console.log(`  diesel=$${diesel} reefer=$${reeferCur} dv=$${dryvanCur} fb=$${flatbedCur} tl=${tlRatio} loads=${totalLoads}`);
+  // Diesel vem do batch principal
+  const diesel = validateNumber(main?.diesel, 3.50, 7.00);
 
-  // Rates
-  const reefer = reeferCur ? {
-    current: reeferCur,
-    high:    validateNumber(raw?.reefer?.high7d,    reeferCur, 3.50) || null,
-    low:     validateNumber(raw?.reefer?.low7d,     1.50, reeferCur) || null,
-    change:  raw?.reefer?.changeWow != null ? parseFloat(raw.reefer.changeWow) : null,
-    loads:   parseInt(raw?.reefer?.loads) || null,
-    best:    raw?.reefer?.topMarket || '–',
+  // Rates: usa chamada dedicada, fallback para batch
+  const reeferSrc  = rates?.reefer  || main?.reefer;
+  const dryvanSrc  = rates?.dryvan  || main?.dryvan;
+  const flatbedSrc = rates?.flatbed || main?.flatbed;
+
+  const reeferCur  = validateNumber(reeferSrc?.current,  1.80, 2.80);
+  const dryvanCur  = validateNumber(dryvanSrc?.current,  1.50, 2.50);
+  const flatbedCur = validateNumber(flatbedSrc?.current, 1.70, 2.60);
+
+  // Stats vêm do batch
+  const tlRatio    = validateNumber(main?.tlRatio,    2.0, 8.0);
+  const totalLoads = validateNumber(main?.totalLoads, 100000, 500000);
+
+  console.log(`  ✅ Final: diesel=${diesel} reefer=${reeferCur} dv=${dryvanCur} fb=${flatbedCur} tl=${tlRatio} loads=${totalLoads} news=${news.length}`);
+
+  const mkRate = (src, cur) => cur ? {
+    current: cur,
+    high:    validateNumber(src?.high7d,    cur, 3.50) || null,
+    low:     validateNumber(src?.low7d,     1.20, cur) || null,
+    change:  src?.changeWow != null ? parseFloat(src.changeWow) : null,
+    loads:   parseInt(src?.loads) || null,
+    best:    src?.topMarket || '–',
   } : { current: null, high: null, low: null, change: null, loads: null, best: '–' };
-
-  const dryvan = dryvanCur ? {
-    current: dryvanCur,
-    high:    validateNumber(raw?.dryvan?.high7d,    dryvanCur, 3.00) || null,
-    low:     validateNumber(raw?.dryvan?.low7d,     1.20, dryvanCur) || null,
-    change:  raw?.dryvan?.changeWow != null ? parseFloat(raw.dryvan.changeWow) : null,
-    loads:   parseInt(raw?.dryvan?.loads) || null,
-    best:    raw?.dryvan?.topMarket || '–',
-  } : { current: null, high: null, low: null, change: null, loads: null, best: '–' };
-
-  const flatbed = flatbedCur ? {
-    current: flatbedCur,
-    high:    validateNumber(raw?.flatbed?.high7d,    flatbedCur, 3.20) || null,
-    low:     validateNumber(raw?.flatbed?.low7d,     1.50, flatbedCur) || null,
-    change:  raw?.flatbed?.changeWow != null ? parseFloat(raw.flatbed.changeWow) : null,
-    loads:   parseInt(raw?.flatbed?.loads) || null,
-    best:    raw?.flatbed?.topMarket || '–',
-  } : { current: null, high: null, low: null, change: null, loads: null, best: '–' };
-
-  // News — usa do batch ou busca separado
-  let news = [];
-  if (raw?.news?.length >= 2) {
-    news = raw.news.filter(n => n?.headline?.length > 20).slice(0, 5).map((n, i) => ({ ...n, breaking: i === 0 }));
-  } else {
-    try { news = await fetchNewsOnly(); } catch(e) { console.warn('  ⚠️ News fallback failed:', e.message); }
-  }
 
   console.log(`✅ Done in ${((Date.now()-start)/1000).toFixed(1)}s`);
 
   return {
     ok: true,
     diesel: { national: diesel },
-    rates: { reefer, dryvan, flatbed },
+    rates: {
+      reefer:  mkRate(reeferSrc,  reeferCur),
+      dryvan:  mkRate(dryvanSrc,  dryvanCur),
+      flatbed: mkRate(flatbedSrc, flatbedCur),
+    },
     heatmap: buildHeatmap(reeferCur),
     news,
     stats: {
