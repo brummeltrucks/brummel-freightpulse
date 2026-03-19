@@ -126,23 +126,35 @@ function buildHeatmap(nat) {
 }
 function calcFuelSurcharge(d) { return d > 1.20 ? parseFloat(((d-1.20)/0.06).toFixed(1)) : 0; }
 
-// ─── 1. DIESEL — Perplexity + AAA ─────────────────────────────────────────────
+// ─── 1. DIESEL — Perplexity + Gemini em paralelo, AAA ─────────────────────────
 async function fetchDiesel() {
   console.log('  ⛽ Diesel...');
-  try {
-    const d = await askPerplexity(
-      `Search gasprices.aaa.com for the current US national average diesel price today.
-Return ONLY: {"national": 4.892}`, 'day');
-    const nat = parseFloat(d?.national);
-    if (nat >= 3.50 && nat <= 7.00) {
-      console.log(`  ✅ Diesel: $${nat}`);
-      return { national: nat, states: buildDieselStates(nat) };
+
+  const prompt = `Go to https://gasprices.aaa.com right now and find the "Current Avg." price for Diesel.
+The page shows a table with Regular, Mid-Grade, Premium, Diesel, E85.
+Find the exact Diesel "Current Avg." number shown today.
+Return ONLY: {"national": 4.892}
+Do NOT return the weekly EIA number. Do NOT estimate. Use the exact AAA number shown right now.`;
+
+  const [rP, rG] = await Promise.allSettled([
+    askPerplexity(prompt, 'day'),
+    askGemini(prompt),
+  ]);
+
+  // Pega o primeiro valor válido
+  for (const r of [rP, rG]) {
+    if (r.status === 'fulfilled') {
+      const nat = parseFloat(r.value?.national);
+      if (nat >= 3.50 && nat <= 7.00) {
+        console.log(`  ✅ Diesel: ${nat}`);
+        return { national: nat, states: buildDieselStates(nat) };
+      }
+      console.warn(`  ⚠️ Diesel invalid value: ${nat}`);
     }
-    throw new Error(`out of range: ${nat}`);
-  } catch(e) {
-    console.warn(`  ⚠️ Diesel failed: ${e.message}`);
-    return { national: null, states: {} };
   }
+
+  console.warn('  ❌ Diesel: both AIs failed');
+  return { national: null, states: {} };
 }
 
 // ─── 2. SPOT RATES — Gemini Google Search ─────────────────────────────────────
