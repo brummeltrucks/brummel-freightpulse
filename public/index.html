@@ -59,18 +59,14 @@
   .dbadge.err{background:rgba(255,68,68,.12);color:var(--red);border:1px solid rgba(255,68,68,.3);}
   .dbadge.load{background:rgba(30,127,196,.12);color:var(--brand-bright);border:1px solid var(--brand-dim);}
 
-  /* DIESEL — nacional apenas */
-  .diesel-panel{grid-column:1;grid-row:1;display:flex;flex-direction:column;}
-  .diesel-panel .panel-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
-  .diesel-national{text-align:center;padding:24px;}
-  .diesel-nat-label{font-size:11px;letter-spacing:3px;color:var(--text-dim);text-transform:uppercase;font-weight:600;margin-bottom:12px;}
-  .diesel-nat-value{font-size:clamp(52px,6vw,80px);font-weight:800;color:var(--text-bright);line-height:1;}
-  .diesel-nat-unit{font-size:13px;color:var(--text-dim);margin-top:6px;letter-spacing:2px;font-weight:500;}
-  .diesel-nat-source{font-size:10px;color:var(--text-dim);margin-top:8px;letter-spacing:1px;}
-  .diesel-surcharge{background:linear-gradient(135deg,rgba(30,127,196,.08),rgba(0,229,160,.05));border:1px solid var(--border);border-radius:4px;padding:16px 24px;text-align:center;width:100%;}
-  .diesel-surcharge-label{font-size:10px;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px;}
-  .diesel-surcharge-value{font-size:32px;font-weight:800;color:var(--yellow);}
-  .diesel-surcharge-sub{font-size:10px;color:var(--text-dim);margin-top:4px;}
+  .diesel-panel{grid-column:1;grid-row:1;display:flex;flex-direction:column;height:auto!important;}
+  .diesel-panel .panel-body{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 14px;}
+  .diesel-national{text-align:center;}
+  .diesel-nat-label{font-size:10px;letter-spacing:3px;color:var(--text-dim);text-transform:uppercase;font-weight:600;margin-bottom:8px;}
+  .diesel-nat-value{font-size:clamp(40px,5vw,64px);font-weight:800;color:var(--text-bright);line-height:1;}
+  .diesel-nat-unit{font-size:11px;color:var(--text-dim);margin-top:4px;letter-spacing:2px;font-weight:500;}
+  .diesel-nat-source{font-size:9px;color:var(--text-dim);margin-top:6px;letter-spacing:1px;}
+  .diesel-nat-surcharge{font-size:12px;color:var(--yellow);font-weight:700;margin-top:10px;letter-spacing:1px;}
 
   /* CENTER */
   .center-col{grid-column:2;grid-row:1;display:flex;flex-direction:column;gap:12px;}
@@ -226,11 +222,7 @@
         <div class="diesel-nat-value" id="dieselNational">$–.–––</div>
         <div class="diesel-nat-unit">PER GALLON · DIESEL</div>
         <div class="diesel-nat-source">Source: AAA GasPrices · Updated every 5 min</div>
-      </div>
-      <div class="diesel-surcharge" style="margin:0 14px 14px;">
-        <div class="diesel-surcharge-label">Fuel Surcharge Index</div>
-        <div class="diesel-surcharge-value" id="dieselSurcharge">–.–%</div>
-        <div class="diesel-surcharge-sub">US carrier fuel surcharge rate</div>
+        <div class="diesel-nat-surcharge" id="dieselSurchargeInline">Fuel Surcharge: –.–%</div>
       </div>
     </div>
   </div>
