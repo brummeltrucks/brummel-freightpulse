@@ -102,8 +102,14 @@ async function askGemini(prompt) {
   return cleanAndParse(text);
 }
 
-// ─── FALLBACKS REAIS (DAT + AAA, March 13 2026) ───────────────────────────────
-const FALLBACK_DIESEL_NATIONAL = 4.892;
+// ─── FALLBACKS REAIS (usados APENAS se AI retornar valor inválido/fora de range) ─
+const FALLBACK_DIESEL_NATIONAL = null; // null = mostra "–" no dashboard
+
+const FALLBACK_RATES = {
+  reefer:  { current:null, high7d:null, low7d:null, changeWow:null, loads:null, topMarket:'–' },
+  dryvan:  { current:null, high7d:null, low7d:null, changeWow:null, loads:null, topMarket:'–' },
+  flatbed: { current:null, high7d:null, low7d:null, changeWow:null, loads:null, topMarket:'–' },
+};
 
 const STATE_OFFSETS = {
   CT:+0.12,ME:+0.08,MA:+0.14,NH:+0.06,RI:+0.10,VT:+0.08,NY:+0.16,NJ:+0.10,PA:+0.06,
@@ -124,41 +130,12 @@ const ALL_STATES = [
 ];
 
 function buildDieselStates(national) {
+  if (!national) return {};
   const states = {};
   ALL_STATES.forEach(st => {
     states[st] = parseFloat((national + (STATE_OFFSETS[st] || 0)).toFixed(3));
   });
   return states;
-}
-
-const FALLBACK_RATES = {
-  reefer:  { current:2.28, high7d:2.60, low7d:1.90, changeWow:+0.05, loads:4500, topMarket:'Chicago, IL' },
-  dryvan:  { current:1.92, high7d:2.20, low7d:1.60, changeWow:+0.08, loads:6200, topMarket:'Atlanta, GA' },
-  flatbed: { current:2.15, high7d:2.50, low7d:1.80, changeWow:+0.07, loads:2900, topMarket:'Dallas, TX'  },
-};
-
-const REEFER_OFFSETS = {
-  CA:+0.28, WA:+0.10, OR:+0.06, NV:-0.04, AZ:-0.02, ID:-0.14, MT:-0.20, WY:-0.20, UT:-0.10, CO:-0.06,
-  ND:-0.26, SD:-0.26, NE:-0.20, KS:-0.16, OK:-0.08, NM:-0.12, TX:-0.06,
-  MN:-0.12, IA:-0.16, MO:-0.12, WI:-0.06, IL:-0.02, IN:-0.06, MI:-0.02, OH:-0.02, KY:-0.06,
-  TN:-0.06, AR:-0.12, LA:-0.06, MS:-0.12, AL:-0.06, GA:+0.04, FL:+0.08, SC:-0.02, NC:-0.02,
-  VA:+0.00, WV:-0.12, PA:+0.04, NY:+0.14, NJ:+0.12, CT:+0.12, MA:+0.16, ME:+0.08,
-  NH:+0.06, VT:+0.02, RI:+0.08, DE:+0.04, MD:+0.06, DC:+0.08, AK:+0.54,
-};
-
-const HEAT_ORDER = [
-  'WA','OR','CA','NV','ID','MT','WY','UT','CO','AZ',
-  'ND','SD','NE','KS','OK','TX','NM','MN','IA','MO',
-  'WI','IL','IN','MI','OH','KY','TN','AR','LA','MS',
-  'AL','GA','FL','SC','NC','VA','WV','PA','NY','NJ',
-  'ME','NH','VT','MA','RI','CT','DE','MD','DC','AK',
-];
-
-function buildHeatmap(nationalReefer) {
-  return HEAT_ORDER.map(abbr => ({
-    abbr,
-    rate: parseFloat((nationalReefer + (REEFER_OFFSETS[abbr] || 0)).toFixed(2)),
-  }));
 }
 
 function calcFuelSurcharge(diesel) {
@@ -176,11 +153,11 @@ Return ONLY: {"national": 4.892}
 Use the exact current number from AAA. Do not use EIA data.`, 'day');
     const nat = parseFloat(data?.national);
     if (!nat || nat < 3.50 || nat > 7.00) throw new Error(`Invalid: ${nat}`);
-    console.log(`  ✅ Diesel: $${nat}`);
+    console.log(`  ✅ Diesel: ${nat}`);
     return { national: nat, states: buildDieselStates(nat), period: 'today' };
   } catch(e) {
-    console.warn(`  ⚠️ Diesel failed (${e.message}), fallback $${FALLBACK_DIESEL_NATIONAL}`);
-    return { national: FALLBACK_DIESEL_NATIONAL, states: buildDieselStates(FALLBACK_DIESEL_NATIONAL), period: 'fallback' };
+    console.warn(`  ⚠️ Diesel failed: ${e.message}`);
+    return { national: null, states: {}, period: 'unavailable' };
   }
 }
 
@@ -243,6 +220,10 @@ async function fetchSpotRates(forceRefresh = false) {
     console.log(`    📌 ${t}: ${merged[t].current} (${isReal ? 'Google scrape ✅' : 'fallback'})`);
   });
 
+  ['reefer','dryvan','flatbed'].forEach(t => {
+    console.log(`    📌 ${t}: ${merged[t].current ?? 'N/A'} (${merged[t].current ? 'Google TODAY ✅' : 'no data'})`);
+  });
+
   ratesCache = { data: merged, ts: Date.now() };
   return merged;
 }
@@ -282,10 +263,10 @@ Return ONLY: {"totalLoads": 285000, "source": "website", "date": "date"}`;
   console.log(`    🔍 T/L: ${tl} (${rTL.value?.source||'?'} ${rTL.value?.date||'?'})`);
   console.log(`    🔍 Loads: ${ld} (${rLoads.value?.source||'?'} ${rLoads.value?.date||'?'})`);
 
-  const finalTL    = (tl  >= TL_MIN    && tl  <= TL_MAX)    ? tl  : 3.8;
-  const finalLoads = (ld  >= LOADS_MIN && ld  <= LOADS_MAX) ? ld  : 285000;
+  const finalTL    = (tl  >= TL_MIN    && tl  <= TL_MAX)    ? tl  : null;
+  const finalLoads = (ld  >= LOADS_MIN && ld  <= LOADS_MAX) ? ld  : null;
 
-  console.log(`    📌 T/L: ${finalTL} | Loads: ${finalLoads}`);
+  console.log(`    📌 T/L: ${finalTL ?? 'N/A'} | Loads: ${finalLoads ?? 'N/A'}`);
   return { totalLoads: finalLoads, reeferTLRatio: finalTL };
 }
 
@@ -373,12 +354,12 @@ async function buildData(forceRates = false) {
     fetchNews(),
   ]);
 
-  const diesel   = rDiesel.status === 'fulfilled' ? rDiesel.value : { national: FALLBACK_DIESEL_NATIONAL, states: buildDieselStates(FALLBACK_DIESEL_NATIONAL), period: 'fallback' };
+  const diesel   = rDiesel.status === 'fulfilled' ? rDiesel.value : { national: null, states: {}, period: 'unavailable' };
   const ratesRaw = rRates.status  === 'fulfilled' ? rRates.value  : FALLBACK_RATES;
-  const stats    = rStats.status  === 'fulfilled' ? rStats.value  : { totalLoads: 285000, reeferTLRatio: 3.8 };
+  const stats    = rStats.status  === 'fulfilled' ? rStats.value  : { totalLoads: null, reeferTLRatio: null };
   const news     = rNews.status   === 'fulfilled' ? rNews.value   : [];
 
-  const heatmap = buildHeatmap(ratesRaw.reefer.current || 2.28);
+  const heatmap = buildHeatmap(ratesRaw.reefer.current);
 
   const rates = {
     reefer:  { current: ratesRaw.reefer.current,  high: ratesRaw.reefer.high7d,  low: ratesRaw.reefer.low7d,  change: ratesRaw.reefer.changeWow,  loads: ratesRaw.reefer.loads,  best: ratesRaw.reefer.topMarket  },
@@ -386,7 +367,7 @@ async function buildData(forceRates = false) {
     flatbed: { current: ratesRaw.flatbed.current, high: ratesRaw.flatbed.high7d, low: ratesRaw.flatbed.low7d, change: ratesRaw.flatbed.changeWow, loads: ratesRaw.flatbed.loads, best: ratesRaw.flatbed.topMarket },
   };
 
-  console.log(`✅ Done in ${((Date.now()-start)/1000).toFixed(1)}s — diesel=$${diesel.national} reefer=$${rates.reefer.current}`);
+  console.log(`✅ Done in ${((Date.now()-start)/1000).toFixed(1)}s — diesel=${diesel.national ?? 'N/A'} reefer=${rates.reefer.current ?? 'N/A'}`);
 
   return {
     ok: true,
