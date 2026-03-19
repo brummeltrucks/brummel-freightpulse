@@ -110,19 +110,40 @@ Return ONLY this exact JSON structure (use null for any value you cannot find):
   }
 }
 
+// ─── FETCH DIESEL SEPARADO ────────────────────────────────────────────────────
+async function fetchDieselOnly() {
+  console.log('  ⛽ Fetching diesel...');
+  const d = await askPerplexity(
+    `Search gasprices.aaa.com for the current US national average diesel price "Current Avg." today.
+Return ONLY: {"diesel": 5.09}`, 'day');
+  const val = validateNumber(d?.diesel);
+  console.log(`  ⛽ Diesel: ${val}`);
+  return val;
+}
+
 // ─── FETCH RATES SEPARADO ─────────────────────────────────────────────────────
 async function fetchRatesOnly() {
   const today = new Date().toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
-  console.log('  📊 Fetching rates separately...');
+  console.log('  📊 Fetching rates...');
   const data = await askPerplexity(
     `Search the web for current US truck spot rates per loaded mile, week of ${today}.
-Search: freightwaves.com, ajot.com, dat.com, transporttopics.com for "DAT spot rates" or "broker spot rates".
-Find national averages for reefer, dry van, and flatbed.
-Typical current ranges: reefer $2.10-$2.50, dry van $1.80-$2.20, flatbed $2.00-$2.40.
-Return ONLY this JSON with real numbers (not null):
+Search freightwaves.com, ajot.com, dat.com for "DAT spot rates" or "broker spot rates march 2026".
+Return ONLY this JSON with the real numbers you find:
 {"reefer":{"current":2.28,"high7d":2.60,"low7d":1.90,"changeWow":0.05,"loads":4500,"topMarket":"Chicago, IL"},"dryvan":{"current":1.92,"high7d":2.20,"low7d":1.60,"changeWow":0.08,"loads":6200,"topMarket":"Atlanta, GA"},"flatbed":{"current":2.15,"high7d":2.50,"low7d":1.80,"changeWow":0.07,"loads":2900,"topMarket":"Dallas, TX"}}`, 'week');
   console.log(`  📊 Rates: reefer=${data?.reefer?.current} dv=${data?.dryvan?.current} fb=${data?.flatbed?.current}`);
   return data;
+}
+
+// ─── FETCH STATS SEPARADO ─────────────────────────────────────────────────────
+async function fetchStatsOnly() {
+  const today = new Date().toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
+  console.log('  📈 Fetching stats...');
+  const d = await askPerplexity(
+    `Search for current US trucking market stats today ${today}.
+Find: 1) DAT reefer truck-to-load ratio. 2) Total loads posted on US loadboards last 24h.
+Return ONLY: {"tlRatio": 3.8, "totalLoads": 285000}`, 'week');
+  console.log(`  📈 Stats: tl=${d?.tlRatio} loads=${d?.totalLoads}`);
+  return d;
 }
 
 // ─── FETCH NEWS SEPARADO ──────────────────────────────────────────────────────
@@ -130,17 +151,17 @@ async function fetchNewsOnly() {
   const today = new Date().toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
   console.log('  📰 Fetching news...');
   const d = await askPerplexity(
-    `Search FreightWaves.com for 4 real news articles published this week (${today}) about US trucking.
-Topics: spot rates, fuel prices, capacity, FMCSA, ports, bankruptcies.
-impact: up=good for carriers, down=bad for rates, neutral=regulatory.
+    `Search FreightWaves.com for 4 real news articles this week (${today}) about US trucking.
+Topics: spot rates, fuel, capacity, FMCSA, ports, bankruptcies.
+impact: up=good for carriers, down=bad, neutral=regulatory.
 Return ONLY: {"news":[{"headline":"headline text","time":"2h ago","url":"https://www.freightwaves.com/news/slug","impact":"up"}]}`, 'week');
   return (d?.news || []).filter(n => n?.headline?.length > 20).slice(0, 5).map((n, i) => ({ ...n, breaking: i === 0 }));
 }
 
 // ─── VALIDATE ─────────────────────────────────────────────────────────────────
-function validateNumber(val, min, max) {
+function validateNumber(val) {
   const n = parseFloat(val);
-  return (!isNaN(n) && n >= min && n <= max) ? n : null;
+  return !isNaN(n) && isFinite(n) ? n : null;
 }
 
 // ─── BUILD ALL ────────────────────────────────────────────────────────────────
