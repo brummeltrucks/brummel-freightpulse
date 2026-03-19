@@ -269,7 +269,7 @@ async function buildData() {
 
   return {
     ok: true,
-    diesel: { national: diesel.national, states: diesel.states },
+    diesel: { national: diesel.national },
     rates: {
       reefer:  { current: rates.reefer.current,  high: rates.reefer.high7d,  low: rates.reefer.low7d,  change: rates.reefer.changeWow,  loads: rates.reefer.loads,  best: rates.reefer.topMarket  },
       dryvan:  { current: rates.dryvan.current,  high: rates.dryvan.high7d,  low: rates.dryvan.low7d,  change: rates.dryvan.changeWow,  loads: rates.dryvan.loads,  best: rates.dryvan.topMarket  },
