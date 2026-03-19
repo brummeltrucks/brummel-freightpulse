@@ -12,14 +12,13 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── CACHE ────────────────────────────────────────────────────────────────────
-const TTL       = 5  * 60 * 1000;      // 5 min  — diesel, news, stats
-const TTL_RATES = 3  * 60 * 60 * 1000; // 3h     — spot rates
+const TTL = 5 * 60 * 1000; // 5 min — tudo junto, incluindo rates
 
-let cache      = { data: null, ts: 0 };
-let ratesCache = { data: null, ts: 0 };
+let cache = { data: null, ts: 0 };
+let ratesCache = { data: null, ts: 0 }; // mantido apenas para /api/force-rates
 
-const isFresh      = () => cache.data      && (Date.now() - cache.ts      < TTL);
-const isRatesFresh = () => ratesCache.data && (Date.now() - ratesCache.ts < TTL_RATES);
+const isFresh      = () => cache.data      && (Date.now() - cache.ts < TTL);
+const isRatesFresh = () => false; // rates sempre buscam novo a cada ciclo
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 function fetchWithTimeout(url, opts = {}, ms = 28000) {
