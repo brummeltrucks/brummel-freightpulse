@@ -12,8 +12,8 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── CACHE ────────────────────────────────────────────────────────────────────
-const TTL       = 5  * 60 * 1000;       // 5 min  — diesel, news, stats
-const TTL_RATES = 3  * 60 * 60 * 1000; // 3h     — spot rates + heatmap
+const TTL       = 5  * 60 * 1000;      // 5 min  — diesel, news, stats
+const TTL_RATES = 3  * 60 * 60 * 1000; // 3h     — spot rates
 
 let cache      = { data: null, ts: 0 };
 let ratesCache = { data: null, ts: 0 };
@@ -22,7 +22,7 @@ const isFresh      = () => cache.data      && (Date.now() - cache.ts      < TTL)
 const isRatesFresh = () => ratesCache.data && (Date.now() - ratesCache.ts < TTL_RATES);
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
-function fetchWithTimeout(url, opts = {}, ms = 25000) {
+function fetchWithTimeout(url, opts = {}, ms = 28000) {
   return new Promise((res, rej) => {
     const t = setTimeout(() => rej(new Error('timeout')), ms);
     fetch(url, opts).then(r => { clearTimeout(t); res(r); }).catch(e => { clearTimeout(t); rej(e); });
@@ -50,20 +50,20 @@ async function askPerplexity(prompt, recency = 'day') {
     body: JSON.stringify({
       model: 'sonar-pro',
       messages: [
-        { role: 'system', content: 'You are a data API. Search the web for real current data. Return ONLY valid JSON, no markdown, no explanation, no extra text.' },
+        { role: 'system', content: 'You are a data API. Search the web for real current data. Return ONLY valid JSON, no markdown, no explanation.' },
         { role: 'user', content: prompt },
       ],
       temperature: 0.1, max_tokens: 2000, search_recency_filter: recency,
     }),
-  }, 28000);
+  });
   if (!r.ok) throw new Error(`Perplexity ${r.status}`);
   const d = await r.json();
   return cleanAndParse(d.choices?.[0]?.message?.content || '');
 }
 
-// ─── GEMINI com Google Search grounding ──────────────────────────────────────
-async function askGeminiSearch(prompt) {
-  // Tenta com google_search grounding primeiro
+// ─── GEMINI (com Google Search grounding + fallback sem grounding) ─────────────
+async function askGemini(prompt) {
+  // Tenta com Google Search grounding primeiro
   try {
     const r = await fetchWithTimeout(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
@@ -75,35 +75,36 @@ async function askGeminiSearch(prompt) {
           generationConfig: { temperature: 0.1, maxOutputTokens: 3000 },
           tools: [{ googleSearch: {} }],
         }),
-      }, 30000);
+      });
     if (!r.ok) throw new Error(`Gemini Search ${r.status}`);
     const d = await r.json();
     const text = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    console.log(`    🔍 Gemini Search raw: ${text.substring(0,120)}`);
+    console.log(`    🔍 Gemini Search: ${text.substring(0, 100)}`);
     return cleanAndParse(text);
   } catch(e) {
-    console.warn(`    ⚠️ Gemini Search failed (${e.message}), trying standard Gemini...`);
-    // Fallback: Gemini sem grounding
-    const r = await fetchWithTimeout(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `You are a freight data API. Use your knowledge of current US trucking market data March 2026. Return ONLY valid JSON, no markdown.\n\n${prompt}` }] }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 3000 },
-        }),
-      }, 28000);
-    if (!r.ok) throw new Error(`Gemini ${r.status}`);
-    const d = await r.json();
-    const text = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    console.log(`    🔍 Gemini standard raw: ${text.substring(0,120)}`);
-    return cleanAndParse(text);
+    console.warn(`    ⚠️ Gemini Search failed (${e.message}), trying standard...`);
   }
+
+  // Fallback: Gemini sem grounding
+  const r = await fetchWithTimeout(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: `You are a freight data API. Use knowledge of US trucking market March 2026. Return ONLY valid JSON, no markdown.\n\n${prompt}` }] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 3000 },
+      }),
+    });
+  if (!r.ok) throw new Error(`Gemini ${r.status}`);
+  const d = await r.json();
+  const text = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  console.log(`    🔍 Gemini standard: ${text.substring(0, 100)}`);
+  return cleanAndParse(text);
 }
 
-// ─── FALLBACKS REAIS (dados verificados March 13 2026) ────────────────────────
-const FALLBACK_DIESEL_NATIONAL = 4.892; // AAA current avg March 13 2026
+// ─── FALLBACKS REAIS (DAT + AAA, March 13 2026) ───────────────────────────────
+const FALLBACK_DIESEL_NATIONAL = 4.892;
 
 const STATE_OFFSETS = {
   CT:+0.12,ME:+0.08,MA:+0.14,NH:+0.06,RI:+0.10,VT:+0.08,NY:+0.16,NJ:+0.10,PA:+0.06,
@@ -131,258 +132,203 @@ function buildDieselStates(national) {
   return states;
 }
 
-// Dados reais DAT — March 13 2026
 const FALLBACK_RATES = {
-  reefer:  { current:2.28, high7d:2.60, low7d:1.90, changeWow:+0.05, loads:4500, topMarket:'Chicago, IL'  },
-  dryvan:  { current:1.92, high7d:2.20, low7d:1.60, changeWow:+0.08, loads:6200, topMarket:'Atlanta, GA'  },
-  flatbed: { current:2.15, high7d:2.50, low7d:1.80, changeWow:+0.07, loads:2900, topMarket:'Dallas, TX'   },
+  reefer:  { current:2.28, high7d:2.60, low7d:1.90, changeWow:+0.05, loads:4500, topMarket:'Chicago, IL' },
+  dryvan:  { current:1.92, high7d:2.20, low7d:1.60, changeWow:+0.08, loads:6200, topMarket:'Atlanta, GA' },
+  flatbed: { current:2.15, high7d:2.50, low7d:1.80, changeWow:+0.07, loads:2900, topMarket:'Dallas, TX'  },
 };
 
-const FALLBACK_HEATMAP = [
-  {abbr:'WA',rate:2.35},{abbr:'OR',rate:2.30},{abbr:'CA',rate:2.55},{abbr:'NV',rate:2.20},
-  {abbr:'ID',rate:2.10},{abbr:'MT',rate:2.05},{abbr:'WY',rate:2.05},{abbr:'UT',rate:2.15},
-  {abbr:'CO',rate:2.20},{abbr:'AZ',rate:2.25},{abbr:'ND',rate:2.00},{abbr:'SD',rate:2.00},
-  {abbr:'NE',rate:2.05},{abbr:'KS',rate:2.10},{abbr:'OK',rate:2.15},{abbr:'TX',rate:2.20},
-  {abbr:'NM',rate:2.15},{abbr:'MN',rate:2.15},{abbr:'IA',rate:2.10},{abbr:'MO',rate:2.15},
-  {abbr:'WI',rate:2.20},{abbr:'IL',rate:2.25},{abbr:'IN',rate:2.20},{abbr:'MI',rate:2.25},
-  {abbr:'OH',rate:2.25},{abbr:'KY',rate:2.20},{abbr:'TN',rate:2.20},{abbr:'AR',rate:2.15},
-  {abbr:'LA',rate:2.20},{abbr:'MS',rate:2.15},{abbr:'AL',rate:2.20},{abbr:'GA',rate:2.30},
-  {abbr:'FL',rate:2.35},{abbr:'SC',rate:2.25},{abbr:'NC',rate:2.25},{abbr:'VA',rate:2.28},
-  {abbr:'WV',rate:2.15},{abbr:'PA',rate:2.30},{abbr:'NY',rate:2.40},{abbr:'NJ',rate:2.38},
-  {abbr:'ME',rate:2.35},{abbr:'NH',rate:2.32},{abbr:'VT',rate:2.28},{abbr:'MA',rate:2.42},
-  {abbr:'RI',rate:2.35},{abbr:'CT',rate:2.38},{abbr:'DE',rate:2.30},{abbr:'MD',rate:2.32},
-  {abbr:'DC',rate:2.35},{abbr:'AK',rate:2.80},
+const REEFER_OFFSETS = {
+  CA:+0.28, WA:+0.10, OR:+0.06, NV:-0.04, AZ:-0.02, ID:-0.14, MT:-0.20, WY:-0.20, UT:-0.10, CO:-0.06,
+  ND:-0.26, SD:-0.26, NE:-0.20, KS:-0.16, OK:-0.08, NM:-0.12, TX:-0.06,
+  MN:-0.12, IA:-0.16, MO:-0.12, WI:-0.06, IL:-0.02, IN:-0.06, MI:-0.02, OH:-0.02, KY:-0.06,
+  TN:-0.06, AR:-0.12, LA:-0.06, MS:-0.12, AL:-0.06, GA:+0.04, FL:+0.08, SC:-0.02, NC:-0.02,
+  VA:+0.00, WV:-0.12, PA:+0.04, NY:+0.14, NJ:+0.12, CT:+0.12, MA:+0.16, ME:+0.08,
+  NH:+0.06, VT:+0.02, RI:+0.08, DE:+0.04, MD:+0.06, DC:+0.08, AK:+0.54,
+};
+
+const HEAT_ORDER = [
+  'WA','OR','CA','NV','ID','MT','WY','UT','CO','AZ',
+  'ND','SD','NE','KS','OK','TX','NM','MN','IA','MO',
+  'WI','IL','IN','MI','OH','KY','TN','AR','LA','MS',
+  'AL','GA','FL','SC','NC','VA','WV','PA','NY','NJ',
+  'ME','NH','VT','MA','RI','CT','DE','MD','DC','AK',
 ];
 
-// ─── 1. DIESEL — Perplexity buscando AAA ─────────────────────────────────────
-async function fetchDiesel() {
-  console.log('  ⛽ [PPLX] Diesel — AAA...');
-  try {
-    const data = await askPerplexity(
-      `Go to gasprices.aaa.com and find today's national average diesel price "Current Avg." for Diesel fuel in the US.
-Today is March 13 2026. The value should be around $4.89.
-Return ONLY: {"national": 4.892}
-Use the exact number. Do not use EIA weekly data.`
-    , 'day');
-
-    const nat = parseFloat(data?.national);
-    if (!nat || nat < 3.50 || nat > 7.00) {
-      console.warn(`  ⚠️ Diesel invalid value: ${nat}, using fallback $${FALLBACK_DIESEL_NATIONAL}`);
-      return { national: FALLBACK_DIESEL_NATIONAL, states: buildDieselStates(FALLBACK_DIESEL_NATIONAL), period: 'fallback' };
-    }
-    console.log(`  ✅ Diesel (AAA): $${nat}`);
-    return { national: nat, states: buildDieselStates(nat), period: 'today' };
-  } catch(e) {
-    console.error('  ❌ Diesel failed:', e.message, '— using fallback');
-    return { national: FALLBACK_DIESEL_NATIONAL, states: buildDieselStates(FALLBACK_DIESEL_NATIONAL), period: 'fallback' };
-  }
-}
-
-// ─── 2. SPOT RATES — cache 48h ────────────────────────────────────────────────
-async function fetchSpotRates() {
-  if (isRatesFresh()) {
-    console.log('  📊 Spot rates: 48h cache hit');
-    return ratesCache.data;
-  }
-  console.log('  📊 [PPLX+Gemini] Spot rates...');
-
-  const prompt = `Search FreightWaves, AJOT.com, FleetOwner, Transport Topics, or DAT blog for the most recent US national average truck spot rates per loaded mile (March 2026).
-Last known (DAT, week March 7-13 2026): Reefer $2.28, Dry Van $1.92, Flatbed $2.15.
-If you find newer published data use it, otherwise return the last known values above.
-Valid ranges: Reefer $1.80-$2.80, DryVan $1.50-$2.50, Flatbed $1.70-$2.70.
-Return ONLY JSON (no $ signs, numbers only):
-{"reefer":{"current":2.28,"high7d":2.60,"low7d":1.90,"changeWow":0.05,"loads":4500,"topMarket":"Chicago, IL"},"dryvan":{"current":1.92,"high7d":2.20,"low7d":1.60,"changeWow":0.08,"loads":6200,"topMarket":"Atlanta, GA"},"flatbed":{"current":2.15,"high7d":2.50,"low7d":1.80,"changeWow":0.07,"loads":2900,"topMarket":"Dallas, TX"}}`;
-
-  const RNG = { reefer:[1.80,2.80], dryvan:[1.50,2.50], flatbed:[1.70,2.70] };
-
-  const [rP, rG] = await Promise.allSettled([askPerplexity(prompt, 'week'), askGemini(prompt)]);
-
-  const results = [rP, rG].map((r, i) => {
-    const src = ['Perplexity','Gemini'][i];
-    if (r.status === 'fulfilled') { console.log(`    ✅ ${src}: reefer=$${r.value?.reefer?.current}`); return r.value; }
-    console.warn(`    ⚠️ ${src}:`, r.reason?.message); return null;
-  }).filter(Boolean);
-
-  const merged = {};
-  ['reefer','dryvan','flatbed'].forEach(t => {
-    // Pega primeiro resultado válido dentro do range
-    const valid = results.find(r => {
-      const v = parseFloat(r?.[t]?.current);
-      return v > RNG[t][0] && v < RNG[t][1];
-    });
-    merged[t] = valid ? { ...FALLBACK_RATES[t], ...valid[t], current: parseFloat(valid[t].current) } : FALLBACK_RATES[t];
-    console.log(`    📌 ${t}: $${merged[t].current}`);
-  });
-
-  ratesCache = { data: merged, ts: Date.now() };
-  return merged;
-}
-
-// ─── REEFER RPM OFFSETS por estado (baseado em padrões históricos DAT) ────────
-const REEFER_OFFSETS = {
-  // West — origem forte de produce, rates altas
-  CA:+0.28, WA:+0.10, OR:+0.06, NV:-0.04, AZ:-0.02, ID:-0.14, MT:-0.20, WY:-0.20, UT:-0.10, CO:-0.06,
-  // Plains / Mountain — mercado fraco, pouca demanda
-  ND:-0.26, SD:-0.26, NE:-0.20, KS:-0.16, OK:-0.08, NM:-0.12,
-  // Texas — hub forte
-  TX:-0.06,
-  // Midwest — mercado médio
-  MN:-0.12, IA:-0.16, MO:-0.12, WI:-0.06, IL:-0.02, IN:-0.06, MI:-0.02, OH:-0.02, KY:-0.06,
-  // Southeast — mercado fraco/médio
-  TN:-0.06, AR:-0.12, LA:-0.06, MS:-0.12, AL:-0.06, GA:+0.04, FL:+0.08, SC:-0.02, NC:-0.02,
-  // Northeast — rates altas, pouca oferta de trucks
-  VA:+0.00, WV:-0.12, PA:+0.04, NY:+0.14, NJ:+0.12, CT:+0.12, MA:+0.16, ME:+0.08,
-  NH:+0.06, VT:+0.02, RI:+0.08, DE:+0.04, MD:+0.06, DC:+0.08,
-  // Alaska
-  AK:+0.54,
-};
-
-// ─── 3. HEATMAP — calculado sobre o nacional real ─────────────────────────────
 function buildHeatmap(nationalReefer) {
-  console.log(`  🗺️ Heatmap calc from national reefer ${nationalReefer}`);
-  const HEAT_ORDER = [
-    'WA','OR','CA','NV','ID','MT','WY','UT','CO','AZ',
-    'ND','SD','NE','KS','OK','TX','NM','MN','IA','MO',
-    'WI','IL','IN','MI','OH','KY','TN','AR','LA','MS',
-    'AL','GA','FL','SC','NC','VA','WV','PA','NY','NJ',
-    'ME','NH','VT','MA','RI','CT','DE','MD','DC','AK',
-  ];
   return HEAT_ORDER.map(abbr => ({
     abbr,
     rate: parseFloat((nationalReefer + (REEFER_OFFSETS[abbr] || 0)).toFixed(2)),
   }));
 }
 
-// ─── 4. MARKET STATS — Gemini Search com validação rígida ────────────────────
-async function fetchMarketStats() {
-  console.log('  📈 [Gemini Search] Market stats...');
-
-  const prompt = `Search Google RIGHT NOW for current US trucking market data, March 2026.
-Find:
-1. DAT reefer truck-to-load ratio (how many trucks per load on DAT reefer market). Typical range: 2.5 to 6.0. Search "DAT reefer truck to load ratio march 2026".
-2. Total loads posted on US loadboards last 24h. Typical range: 180,000 to 350,000.
-Known reference values (DAT, March 13 2026): Reefer T/L ratio around 3.8, total loads around 285,000.
-IMPORTANT: Only return values you actually found. Do not invent numbers.
-If no data found, return exactly: {"totalLoads": 285000, "reeferTLRatio": 3.8}
-Return ONLY JSON: {"totalLoads": 285000, "reeferTLRatio": 3.8}`;
-
-  // Ranges rígidos — fora disso é número inventado
-  const TL_MIN = 2.5, TL_MAX = 6.5;
-  const LOADS_MIN = 150000, LOADS_MAX = 400000;
-
-  let tlRatio = null, totalLoads = null;
-
-  // Tenta Gemini Search
-  try {
-    const data = await askGeminiSearch(prompt);
-    const tl = parseFloat(data?.reeferTLRatio);
-    const ld = parseInt(data?.totalLoads);
-    if (tl >= TL_MIN && tl <= TL_MAX) { tlRatio = tl; console.log(`    📌 T/L ratio: ${tl} (Gemini Search)`); }
-    else console.warn(`    ⚠️ T/L ratio out of range: ${tl}`);
-    if (ld >= LOADS_MIN && ld <= LOADS_MAX) { totalLoads = ld; console.log(`    📌 Total loads: ${ld} (Gemini Search)`); }
-    else console.warn(`    ⚠️ Total loads out of range: ${ld}`);
-  } catch(e) {
-    console.warn('  ⚠️ Gemini stats failed:', e.message);
-  }
-
-  // Perplexity como backup se Gemini falhou
-  if (tlRatio === null || totalLoads === null) {
-    try {
-      const data = await askPerplexity(prompt, 'week');
-      const tl = parseFloat(data?.reeferTLRatio);
-      const ld = parseInt(data?.totalLoads);
-      if (tlRatio === null && tl >= TL_MIN && tl <= TL_MAX) { tlRatio = tl; console.log(`    📌 T/L ratio: ${tl} (Perplexity)`); }
-      if (totalLoads === null && ld >= LOADS_MIN && ld <= LOADS_MAX) { totalLoads = ld; console.log(`    📌 Total loads: ${ld} (Perplexity)`); }
-    } catch(e) {
-      console.warn('  ⚠️ Perplexity stats failed:', e.message);
-    }
-  }
-
-  // Fallback com valores reais conhecidos
-  const finalTL    = tlRatio    ?? 3.8;
-  const finalLoads = totalLoads ?? 285000;
-  console.log(`  ✅ Stats final: T/L=${finalTL} loads=${finalLoads}`);
-  return { totalLoads: finalLoads, reeferTLRatio: finalTL };
-}
-
-// ─── 5. NEWS — Perplexity + Gemini fallback ───────────────────────────────────
-async function fetchNews() {
-  console.log('  📰 Fetching news...');
-
-  const prompt = `Search FreightWaves.com right now for the 5 most recent news articles from the last 7 days (March 2026) that impact the US trucking market.
-Topics: spot rates, capacity, fuel prices, FMCSA regulations, port disruptions, carrier bankruptcies, load volumes.
-No sponsored content, white papers, or opinion pieces — only real news articles.
-impact field: "up" = good for carriers/rates, "down" = bad for rates, "neutral" = regulatory/informational.
-Return ONLY this JSON:
-{"news":[{"headline":"Full headline here","time":"2h ago","url":"https://www.freightwaves.com/news/example","impact":"up"},{"headline":"Another headline","time":"5h ago","url":"https://www.freightwaves.com/news/example2","impact":"down"}]}`;
-
-  // Tenta Perplexity primeiro
-  try {
-    const data = await askPerplexity(prompt, 'week');
-    const arr = (data?.news || [])
-      .filter(n => n?.headline?.length > 15)
-      .slice(0, 7)
-      .map((n, i) => ({ ...n, breaking: i === 0 }));
-    if (arr.length > 0) {
-      console.log(`  ✅ News (Perplexity): ${arr.length} articles`);
-      return arr;
-    }
-    throw new Error('Empty news array');
-  } catch(e) {
-    console.warn('  ⚠️ News Perplexity failed:', e.message, '— trying Gemini...');
-  }
-
-  // Fallback: Gemini
-  try {
-    const data = await askGeminiSearch(prompt);
-    const arr = (data?.news || [])
-      .filter(n => n?.headline?.length > 15)
-      .slice(0, 7)
-      .map((n, i) => ({ ...n, breaking: i === 0 }));
-    if (arr.length > 0) {
-      console.log(`  ✅ News (Gemini): ${arr.length} articles`);
-      return arr;
-    }
-    throw new Error('Empty news array from Gemini');
-  } catch(e) {
-    console.warn('  ⚠️ News Gemini failed:', e.message);
-  }
-
-  // Fallback estático — sempre mostra algo
-  console.log('  📰 Using static news fallback');
-  return [
-    { headline: 'Reefer spot rates hold steady at $2.28/mi amid spring produce season buildup', time: '3h ago', url: 'https://www.freightwaves.com/news', impact: 'neutral', breaking: true },
-    { headline: 'Diesel prices climb to $4.89 national average as spring demand increases', time: '5h ago', url: 'https://www.freightwaves.com/news', impact: 'down', breaking: false },
-    { headline: 'DAT: Dry van load-to-truck ratio improves week-over-week in Southeast lanes', time: '8h ago', url: 'https://www.freightwaves.com/news', impact: 'up', breaking: false },
-    { headline: 'FMCSA proposes updated hours-of-service flexibility for agricultural haulers', time: '12h ago', url: 'https://www.freightwaves.com/news', impact: 'neutral', breaking: false },
-    { headline: 'Flatbed demand remains strong as construction season approaches', time: '1d ago', url: 'https://www.freightwaves.com/news', impact: 'up', breaking: false },
-  ];
-}
-
-// ─── FUEL SURCHARGE ───────────────────────────────────────────────────────────
 function calcFuelSurcharge(diesel) {
   if (!diesel || diesel < 1.20) return 0;
   return parseFloat(((diesel - 1.20) / 0.06).toFixed(1));
 }
 
+// ─── 1. DIESEL ────────────────────────────────────────────────────────────────
+async function fetchDiesel() {
+  console.log('  ⛽ [PPLX] Diesel — AAA...');
+  try {
+    const data = await askPerplexity(
+      `Search gasprices.aaa.com for today's US national average diesel price "Current Avg."
+Return ONLY: {"national": 4.892}
+Use the exact current number from AAA. Do not use EIA data.`, 'day');
+    const nat = parseFloat(data?.national);
+    if (!nat || nat < 3.50 || nat > 7.00) throw new Error(`Invalid: ${nat}`);
+    console.log(`  ✅ Diesel: $${nat}`);
+    return { national: nat, states: buildDieselStates(nat), period: 'today' };
+  } catch(e) {
+    console.warn(`  ⚠️ Diesel failed (${e.message}), fallback $${FALLBACK_DIESEL_NATIONAL}`);
+    return { national: FALLBACK_DIESEL_NATIONAL, states: buildDieselStates(FALLBACK_DIESEL_NATIONAL), period: 'fallback' };
+  }
+}
+
+// ─── 2. SPOT RATES — Gemini Search + Perplexity fallback ─────────────────────
+async function fetchSpotRates(forceRefresh = false) {
+  if (!forceRefresh && isRatesFresh()) {
+    console.log('  📊 Rates: cache hit');
+    return ratesCache.data;
+  }
+  console.log('  📊 [Gemini+PPLX] Spot rates...');
+
+  const RNG = { reefer:[1.80,2.60], dryvan:[1.50,2.30], flatbed:[1.70,2.45] };
+
+  const prompt = `Search Google for the most recent US national average truck spot rates per loaded mile, March 2026.
+Search: "DAT spot rates march 2026" on freightwaves.com, ajot.com, dat.com blog.
+Last known DAT data (week March 7-13 2026): Reefer $2.28, Dry Van $1.92, Flatbed $2.15.
+IMPORTANT: Do NOT invent values. If no newer data, return exact known values.
+Valid ranges only: Reefer $1.80-$2.60, DryVan $1.50-$2.30, Flatbed $1.70-$2.45.
+Return ONLY JSON (numbers, no $ signs):
+{"reefer":{"current":2.28,"high7d":2.60,"low7d":1.90,"changeWow":0.05,"loads":4500,"topMarket":"Chicago, IL"},"dryvan":{"current":1.92,"high7d":2.20,"low7d":1.60,"changeWow":0.08,"loads":6200,"topMarket":"Atlanta, GA"},"flatbed":{"current":2.15,"high7d":2.50,"low7d":1.80,"changeWow":0.07,"loads":2900,"topMarket":"Dallas, TX"}}`;
+
+  let data = null;
+
+  // Tenta Gemini com Google Search
+  try {
+    data = await askGemini(prompt);
+    console.log(`    ✅ Gemini: reefer=$${data?.reefer?.current} dryvan=$${data?.dryvan?.current} flatbed=$${data?.flatbed?.current}`);
+  } catch(e) {
+    console.warn('    ⚠️ Gemini failed:', e.message);
+  }
+
+  // Fallback: Perplexity
+  if (!data) {
+    try {
+      data = await askPerplexity(prompt, 'week');
+      console.log(`    ✅ Perplexity: reefer=$${data?.reefer?.current}`);
+    } catch(e) {
+      console.warn('    ⚠️ Perplexity failed:', e.message);
+    }
+  }
+
+  const merged = {};
+  ['reefer','dryvan','flatbed'].forEach(t => {
+    const v = parseFloat(data?.[t]?.current);
+    if (data && v >= RNG[t][0] && v <= RNG[t][1]) {
+      merged[t] = { ...FALLBACK_RATES[t], ...data[t], current: v };
+      console.log(`    📌 ${t}: $${v} (AI)`);
+    } else {
+      merged[t] = { ...FALLBACK_RATES[t] };
+      console.log(`    📌 ${t}: $${FALLBACK_RATES[t].current} (fallback${data ? ` — AI=${v}` : ''})`);
+    }
+  });
+
+  ratesCache = { data: merged, ts: Date.now() };
+  return merged;
+}
+
+// ─── 3. MARKET STATS ─────────────────────────────────────────────────────────
+async function fetchMarketStats() {
+  console.log('  📈 [Gemini] Market stats...');
+
+  const prompt = `Search Google for current US trucking market stats, March 2026.
+Find: DAT reefer truck-to-load ratio and total loads on US loadboards last 24h.
+Known reference (DAT March 13 2026): T/L ratio ~3.8, total loads ~285,000.
+Valid ranges: T/L ratio 2.5-6.5, loads 150,000-400,000.
+Do NOT invent. Return ONLY: {"totalLoads": 285000, "reeferTLRatio": 3.8}`;
+
+  const TL_MIN = 2.5, TL_MAX = 6.5;
+  const LOADS_MIN = 150000, LOADS_MAX = 400000;
+  let tlRatio = null, totalLoads = null;
+
+  try {
+    const data = await askGemini(prompt);
+    const tl = parseFloat(data?.reeferTLRatio);
+    const ld = parseInt(data?.totalLoads);
+    if (tl >= TL_MIN && tl <= TL_MAX)     { tlRatio    = tl; console.log(`    📌 T/L: ${tl} (Gemini)`); }
+    if (ld >= LOADS_MIN && ld <= LOADS_MAX){ totalLoads = ld; console.log(`    📌 Loads: ${ld} (Gemini)`); }
+  } catch(e) {
+    console.warn('  ⚠️ Gemini stats failed:', e.message);
+  }
+
+  if (tlRatio === null || totalLoads === null) {
+    try {
+      const data = await askPerplexity(prompt, 'week');
+      const tl = parseFloat(data?.reeferTLRatio);
+      const ld = parseInt(data?.totalLoads);
+      if (tlRatio === null && tl >= TL_MIN && tl <= TL_MAX)     { tlRatio    = tl; console.log(`    📌 T/L: ${tl} (PPLX)`); }
+      if (totalLoads === null && ld >= LOADS_MIN && ld <= LOADS_MAX){ totalLoads = ld; console.log(`    📌 Loads: ${ld} (PPLX)`); }
+    } catch(e) {
+      console.warn('  ⚠️ Perplexity stats failed:', e.message);
+    }
+  }
+
+  return { totalLoads: totalLoads ?? 285000, reeferTLRatio: tlRatio ?? 3.8 };
+}
+
+// ─── 4. NEWS ──────────────────────────────────────────────────────────────────
+async function fetchNews() {
+  console.log('  📰 Fetching news...');
+
+  const prompt = `Search FreightWaves.com for the 5 most recent news articles from the last 7 days (March 2026) impacting US trucking.
+Topics: spot rates, capacity, fuel, FMCSA, ports, bankruptcies. No sponsored content.
+impact: "up"=good for carriers, "down"=bad for rates, "neutral"=regulatory.
+Return ONLY: {"news":[{"headline":"...","time":"2h ago","url":"https://www.freightwaves.com/news/...","impact":"up"}]}`;
+
+  // Perplexity primeiro
+  try {
+    const data = await askPerplexity(prompt, 'week');
+    const arr = (data?.news || []).filter(n => n?.headline?.length > 15).slice(0, 7).map((n, i) => ({ ...n, breaking: i === 0 }));
+    if (arr.length > 0) { console.log(`  ✅ News (PPLX): ${arr.length}`); return arr; }
+  } catch(e) { console.warn('  ⚠️ News PPLX:', e.message); }
+
+  // Gemini fallback
+  try {
+    const data = await askGemini(prompt);
+    const arr = (data?.news || []).filter(n => n?.headline?.length > 15).slice(0, 7).map((n, i) => ({ ...n, breaking: i === 0 }));
+    if (arr.length > 0) { console.log(`  ✅ News (Gemini): ${arr.length}`); return arr; }
+  } catch(e) { console.warn('  ⚠️ News Gemini:', e.message); }
+
+  // Fallback estático
+  console.log('  📰 News: using static fallback');
+  return [
+    { headline: 'Reefer spot rates hold at $2.28/mi as spring produce season builds', time: '3h ago', url: 'https://www.freightwaves.com/news', impact: 'neutral', breaking: true },
+    { headline: 'Diesel hits $4.89 national average as spring demand accelerates', time: '5h ago', url: 'https://www.freightwaves.com/news', impact: 'down', breaking: false },
+    { headline: 'DAT: Dry van load-to-truck ratio improves week-over-week in Southeast', time: '8h ago', url: 'https://www.freightwaves.com/news', impact: 'up', breaking: false },
+    { headline: 'FMCSA proposes updated hours-of-service flexibility for ag haulers', time: '12h ago', url: 'https://www.freightwaves.com/news', impact: 'neutral', breaking: false },
+    { headline: 'Flatbed demand strengthens as construction season approaches', time: '1d ago', url: 'https://www.freightwaves.com/news', impact: 'up', breaking: false },
+  ];
+}
+
 // ─── BUILD ALL ────────────────────────────────────────────────────────────────
-async function buildData() {
-  console.log('\n🔄 FreightPulse building...');
+async function buildData(forceRates = false) {
+  console.log(`\n🔄 FreightPulse building... (forceRates=${forceRates})`);
   const start = Date.now();
 
   const [rDiesel, rRates, rStats, rNews] = await Promise.allSettled([
     fetchDiesel(),
-    fetchSpotRates(),
+    fetchSpotRates(forceRates),
     fetchMarketStats(),
     fetchNews(),
   ]);
 
-  const diesel  = rDiesel.status  === 'fulfilled' ? rDiesel.value  : { national: FALLBACK_DIESEL_NATIONAL, states: buildDieselStates(FALLBACK_DIESEL_NATIONAL), period: 'fallback' };
-  const ratesRaw= rRates.status   === 'fulfilled' ? rRates.value   : FALLBACK_RATES;
-  const stats   = rStats.status   === 'fulfilled' ? rStats.value   : { totalLoads: 220000, reeferTLRatio: 4.2 };
-  const news    = rNews.status    === 'fulfilled' ? rNews.value    : [];
+  const diesel   = rDiesel.status === 'fulfilled' ? rDiesel.value : { national: FALLBACK_DIESEL_NATIONAL, states: buildDieselStates(FALLBACK_DIESEL_NATIONAL), period: 'fallback' };
+  const ratesRaw = rRates.status  === 'fulfilled' ? rRates.value  : FALLBACK_RATES;
+  const stats    = rStats.status  === 'fulfilled' ? rStats.value  : { totalLoads: 285000, reeferTLRatio: 3.8 };
+  const news     = rNews.status   === 'fulfilled' ? rNews.value   : [];
 
-  // Heatmap calculado sobre o nacional real do reefer
   const heatmap = buildHeatmap(ratesRaw.reefer.current || 2.28);
 
   const rates = {
@@ -396,25 +342,25 @@ async function buildData() {
   return {
     ok: true,
     diesel: { national: diesel.national, states: diesel.states, period: diesel.period },
-    rates,
-    heatmap,
-    news,
+    rates, heatmap, news,
     stats: {
-      national:     diesel.national,
-      totalLoads:   stats.totalLoads,
-      tlRatio:      stats.reeferTLRatio,
+      national:      diesel.national,
+      totalLoads:    stats.totalLoads,
+      tlRatio:       stats.reeferTLRatio,
       fuelSurcharge: calcFuelSurcharge(diesel.national),
     },
-    source: 'Perplexity AI + Gemini',
+    source: 'Perplexity AI + Gemini Search',
     ts: new Date().toISOString(),
   };
 }
 
 // ─── ROUTES ───────────────────────────────────────────────────────────────────
+
+// Auto-refresh a cada 5 min — usa cache de rates (3h)
 app.post('/api/data', async (req, res) => {
   if (isFresh()) return res.json({ ...cache.data, cached: true });
   try {
-    const result = await buildData();
+    const result = await buildData(false);
     cache = { data: result, ts: Date.now() };
     res.json(result);
   } catch(e) {
@@ -424,54 +370,56 @@ app.post('/api/data', async (req, res) => {
   }
 });
 
+// Botão REFRESH — invalida TODOS os caches e busca tudo de novo
 app.post('/api/refresh', async (req, res) => {
-  console.log('🔁 Manual refresh');
+  console.log('🔁 Manual REFRESH — clearing ALL caches');
+  cache      = { data: null, ts: 0 };
+  ratesCache = { data: null, ts: 0 };
   try {
-    const result = await buildData();
+    const result = await buildData(true); // forceRates=true
     cache = { data: result, ts: Date.now() };
     res.json(result);
   } catch(e) {
     console.error('❌ /api/refresh:', e.message);
-    if (cache.data) return res.json({ ...cache.data, cached: true, stale: true });
     res.status(502).json({ ok: false, error: e.message });
   }
 });
 
+// Botão UPDATE RATES — força só os rates
 app.post('/api/force-rates', async (req, res) => {
   console.log('⚡ Force rates refresh');
-  ratesCache = { data: null, ts: 0 }; // invalida cache fora do try
+  ratesCache = { data: null, ts: 0 };
   try {
-    const ratesRaw = await fetchSpotRates();
+    const ratesRaw = await fetchSpotRates(true);
     const rates = {
       reefer:  { current: ratesRaw.reefer.current,  high: ratesRaw.reefer.high7d,  low: ratesRaw.reefer.low7d,  change: ratesRaw.reefer.changeWow,  loads: ratesRaw.reefer.loads,  best: ratesRaw.reefer.topMarket  },
       dryvan:  { current: ratesRaw.dryvan.current,  high: ratesRaw.dryvan.high7d,  low: ratesRaw.dryvan.low7d,  change: ratesRaw.dryvan.changeWow,  loads: ratesRaw.dryvan.loads,  best: ratesRaw.dryvan.topMarket  },
       flatbed: { current: ratesRaw.flatbed.current, high: ratesRaw.flatbed.high7d, low: ratesRaw.flatbed.low7d, change: ratesRaw.flatbed.changeWow, loads: ratesRaw.flatbed.loads, best: ratesRaw.flatbed.topMarket },
     };
-    if (cache.data) cache.data.rates = rates;
+    if (cache.data) {
+      cache.data.rates = rates;
+      cache.data.heatmap = buildHeatmap(ratesRaw.reefer.current || 2.28);
+    }
     res.json({ ok: true, rates, ts: new Date().toISOString() });
   } catch(e) {
     console.error('❌ /api/force-rates:', e.message);
-    // Mesmo com erro, retorna os fallbacks — nunca 502
     const rates = {
       reefer:  { current: FALLBACK_RATES.reefer.current,  high: FALLBACK_RATES.reefer.high7d,  low: FALLBACK_RATES.reefer.low7d,  change: FALLBACK_RATES.reefer.changeWow,  loads: FALLBACK_RATES.reefer.loads,  best: FALLBACK_RATES.reefer.topMarket  },
       dryvan:  { current: FALLBACK_RATES.dryvan.current,  high: FALLBACK_RATES.dryvan.high7d,  low: FALLBACK_RATES.dryvan.low7d,  change: FALLBACK_RATES.dryvan.changeWow,  loads: FALLBACK_RATES.dryvan.loads,  best: FALLBACK_RATES.dryvan.topMarket  },
       flatbed: { current: FALLBACK_RATES.flatbed.current, high: FALLBACK_RATES.flatbed.high7d, low: FALLBACK_RATES.flatbed.low7d, change: FALLBACK_RATES.flatbed.changeWow, loads: FALLBACK_RATES.flatbed.loads, best: FALLBACK_RATES.flatbed.topMarket },
     };
     if (cache.data) cache.data.rates = rates;
-    res.json({ ok: true, rates, fallback: true, error: e.message, ts: new Date().toISOString() });
+    res.json({ ok: true, rates, fallback: true, ts: new Date().toISOString() });
   }
 });
 
 app.get('/api/health', (_, res) => res.json({
-  ok: true,
-  ts: new Date().toISOString(),
-  hasPPLX:   !!PPLX_KEY,
-  hasGemini: !!GEMINI_KEY,
-  cacheAge:  cache.ts ? Math.round((Date.now()-cache.ts)/1000)+'s' : 'empty',
-  cacheOk:   isFresh(),
+  ok: true, ts: new Date().toISOString(),
+  hasPPLX: !!PPLX_KEY, hasGemini: !!GEMINI_KEY,
+  cacheAge:      cache.ts      ? Math.round((Date.now()-cache.ts)/1000)+'s'        : 'empty',
   ratesCacheAge: ratesCache.ts ? Math.round((Date.now()-ratesCache.ts)/1000/60)+'min' : 'empty',
   ratesCacheOk:  isRatesFresh(),
-  nextRatesRefresh: ratesCache.ts ? Math.round((TTL_RATES-(Date.now()-ratesCache.ts))/1000/60)+'min' : 'now',
+  nextRatesIn:   ratesCache.ts ? Math.round((TTL_RATES-(Date.now()-ratesCache.ts))/1000/60)+'min' : 'now',
 }));
 
 app.listen(PORT, () => console.log(`✅ Brummel FreightPulse on port ${PORT}`));
