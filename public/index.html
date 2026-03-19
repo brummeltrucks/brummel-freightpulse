@@ -220,26 +220,27 @@
       <div class="sparkline"><canvas id="dieselSparkline"></canvas></div>
     </div>
 
-    <!-- Fuel Surcharge -->
+    <!-- Fuel Surcharge REMOVIDO — já existe no bottom row -->
+
+    <!-- Reefer vs Diesel Spread -->
     <div class="stat-card" style="flex:0 0 auto;">
-      <div style="position:absolute;top:0;left:0;right:0;height:2px;background:var(--yellow)"></div>
-      <div class="stat-label">⚡ Fuel Surcharge Index</div>
-      <div class="stat-value" id="fuelSurcharge">–.–%</div>
-      <div class="stat-delta" id="surchargeDelta"><span style="color:var(--text-dim)">Loading…</span></div>
-      <div class="stat-sub">US carrier fuel surcharge rate</div>
-      <div class="sparkline"><canvas id="surchargeSparkline"></canvas></div>
+      <div style="position:absolute;top:0;left:0;right:0;height:2px;background:var(--blue-bright)"></div>
+      <div class="stat-label">📉 Reefer vs Diesel Spread</div>
+      <div class="stat-value" id="spreadVal">$–.––</div>
+      <div class="stat-delta" id="spreadDelta"><span style="color:var(--text-dim)">Loading…</span></div>
+      <div class="stat-sub">Reefer RPM minus diesel cost/mi</div>
     </div>
 
     <!-- Reefer WoW Change -->
     <div class="stat-card" style="flex:0 0 auto;">
-      <div style="position:absolute;top:0;left:0;right:0;height:2px;background:var(--blue-bright)"></div>
+      <div style="position:absolute;top:0;left:0;right:0;height:2px;background:var(--brand-bright)"></div>
       <div class="stat-label">❄️ Reefer Week Change</div>
       <div class="stat-value" id="reeferWow">–</div>
       <div class="stat-delta" id="reeferWowDelta"><span style="color:var(--text-dim)">Loading…</span></div>
       <div class="stat-sub">Reefer spot rate WoW change</div>
     </div>
 
-    <!-- Market Signal -->
+    <!-- Market Condition -->
     <div class="stat-card" style="flex:0 0 auto;">
       <div style="position:absolute;top:0;left:0;right:0;height:2px;background:var(--orange)"></div>
       <div class="stat-label">📡 Market Condition</div>
