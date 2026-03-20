@@ -516,8 +516,8 @@ function renderHeatmap(){
 
 function renderNews(items){
   if(!items||!items.length){
-    document.getElementById('newsFeed').innerHTML='<div style="padding:20px;color:var(--text-dim);font-size:12px">No news available</div>';
-    badge('newsBadge','err','NO DATA');
+    document.getElementById('newsFeed').innerHTML='<div style="padding:20px;color:var(--text-dim);font-size:12px">Searching latest news…</div>';
+    badge('newsBadge','load','SEARCHING');
     return;
   }
   const impactIcon={up:'▲',down:'▼',neutral:'●'};
@@ -533,7 +533,7 @@ function renderNews(items){
       <div class="news-headline">
         ${bt}<span style="color:${ic_color};font-size:10px;margin-right:3px">${ic}</span>${n.headline}
       </div>
-      <div class="news-time">${n.time}</div>
+      <div class="news-time">${n.time||''}</div>
     </div>`;
   }).join('');
   badge('newsBadge','live','FREIGHTWAVES');
